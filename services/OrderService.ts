@@ -96,7 +96,7 @@ export class OrderService {
       amount: order.total,
       currency: order.currency,
       description: `Замовлення ${order.orderNumber}`,
-      returnUrl: buildAbsoluteUrl(`/checkout/success?order=${order.orderNumber}`),
+      returnUrl: buildAbsoluteUrl(`/api/payment/return?order=${order.orderNumber}`),
       callbackUrl: buildAbsoluteUrl("/api/payment/callback"),
       customerEmail: order.customerEmail || undefined,
       items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
