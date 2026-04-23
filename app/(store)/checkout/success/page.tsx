@@ -1,11 +1,36 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle, Clock, XCircle } from "lucide-react";
+import { prisma } from "@/shared/db";
 
 export const metadata: Metadata = {
   title: "Замовлення прийнято",
   robots: { index: false, follow: false },
 };
+
+export const dynamic = "force-dynamic";
+
+async function getPageSettings() {
+  const defaults: Record<string, string> = {
+    checkout_success_title: "Замовлення прийнято!",
+    checkout_success_text: "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження.",
+    checkout_failed_title: "Оплата не пройшла",
+    checkout_failed_text: "Оплата не була завершена. Ваше замовлення збережено — ви можете спробувати оплатити ще раз або зв'язатися з нами.",
+    checkout_pending_title: "Очікуємо підтвердження оплати",
+    checkout_pending_text: "Ваше замовлення прийнято. Оплата ще обробляється — ми повідомимо вас коли вона буде підтверджена.",
+  };
+
+  try {
+    const settings = await prisma.settings.findMany({
+      where: { key: { startsWith: "checkout_" } },
+    });
+    for (const s of settings) {
+      if (s.value) defaults[s.key] = s.value;
+    }
+  } catch { /* */ }
+
+  return defaults;
+}
 
 export default async function CheckoutSuccessPage({
   searchParams,
@@ -14,34 +39,42 @@ export default async function CheckoutSuccessPage({
 }) {
   const { order, status } = await searchParams;
   const isFailed = status === "failed" || status === "Declined";
+  const isPending = status === "pending";
+  const hp = await getPageSettings();
+
+  const title = isFailed
+    ? hp.checkout_failed_title
+    : isPending
+      ? hp.checkout_pending_title
+      : hp.checkout_success_title;
+
+  const text = isFailed
+    ? hp.checkout_failed_text
+    : isPending
+      ? hp.checkout_pending_text
+      : hp.checkout_success_text;
 
   return (
     <div className="max-w-xl mx-auto px-4 py-16 text-center">
       <div className="flex justify-center mb-6">
         {isFailed ? (
           <XCircle className="h-16 w-16 text-red-500" />
-        ) : status === "pending" ? (
+        ) : isPending ? (
           <Clock className="h-16 w-16 text-yellow-500" />
         ) : (
           <CheckCircle className="h-16 w-16 text-green-600" />
         )}
       </div>
 
-      <h1 className="text-2xl font-bold text-gray-900">
-        {isFailed ? "Оплата не пройшла" : "Замовлення прийнято!"}
-      </h1>
+      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
 
       {order && (
         <p className="mt-2 text-lg text-gray-600">
-          Номер замовлення: <span className="font-semibold">{order}</span>
+          Номер замовлення: <span className="font-semibold font-mono">{order}</span>
         </p>
       )}
 
-      <p className="mt-4 text-gray-500">
-        {isFailed
-          ? "Оплата не була завершена. Ваше замовлення збережено — ви можете спробувати оплатити ще раз або зв'язатися з нами."
-          : "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження."}
-      </p>
+      <p className="mt-4 text-gray-500">{text}</p>
 
       <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
         <Link

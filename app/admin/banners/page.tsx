@@ -17,6 +17,13 @@ const HOMEPAGE_KEYS = [
   { key: "homepage_cta_link", label: "Посилання CTA", default: "/katalog/" },
   { key: "homepage_products_title", label: "Заголовок секції товарів", default: "Наші товари" },
   { key: "homepage_categories_title", label: "Заголовок секції категорій", default: "Категорії" },
+  { key: "_divider_1", label: "--- Сторінка успішної оплати ---", default: "" },
+  { key: "checkout_success_title", label: "Заголовок (успішна оплата)", default: "Замовлення прийнято!" },
+  { key: "checkout_success_text", label: "Текст (успішна оплата)", default: "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження." },
+  { key: "checkout_failed_title", label: "Заголовок (помилка оплати)", default: "Оплата не пройшла" },
+  { key: "checkout_failed_text", label: "Текст (помилка оплати)", default: "Оплата не була завершена. Ваше замовлення збережено — ви можете спробувати оплатити ще раз або зв'язатися з нами." },
+  { key: "checkout_pending_title", label: "Заголовок (очікування)", default: "Очікуємо підтвердження оплати" },
+  { key: "checkout_pending_text", label: "Текст (очікування)", default: "Ваше замовлення прийнято. Оплата ще обробляється — ми повідомимо вас коли вона буде підтверджена." },
 ];
 
 export default function AdminBannersPage() {
@@ -43,6 +50,7 @@ export default function AdminBannersPage() {
     setMessage("");
     try {
       for (const item of HOMEPAGE_KEYS) {
+        if (item.key.startsWith("_")) continue;
         const value = settings[item.key] ?? item.default;
         await fetch("/api/admin/settings", {
           method: "PUT",
@@ -67,9 +75,15 @@ export default function AdminBannersPage() {
       )}
 
       <div className="bg-white rounded-xl border p-6 space-y-4">
-        {HOMEPAGE_KEYS.map((item) => (
+        {HOMEPAGE_KEYS.map((item) => {
+          if (item.key.startsWith("_divider")) {
+            return <div key={item.key} className="border-t pt-4 mt-4"><h3 className="text-sm font-semibold text-gray-500 uppercase">{item.label.replace(/^-+ | -+$/g, "").trim()}</h3></div>;
+          }
+
+          const isTextarea = item.key.includes("description") || item.key.includes("text");
+          return (
           <div key={item.key}>
-            {item.key === "homepage_description" ? (
+            {isTextarea ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
                 <textarea
@@ -88,7 +102,8 @@ export default function AdminBannersPage() {
               />
             )}
           </div>
-        ))}
+        );
+        })}
 
         <Button onClick={handleSave} loading={saving}>Зберегти</Button>
       </div>

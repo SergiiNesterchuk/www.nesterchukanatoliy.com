@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/Spinner";
+import Link from "next/link";
 
 export function PaymentRedirect() {
   const searchParams = useSearchParams();
   const formRef = useRef<HTMLFormElement>(null);
   const [error, setError] = useState("");
+  const [orderNumber, setOrderNumber] = useState("");
   const submitted = useRef(false);
 
   useEffect(() => {
@@ -26,6 +28,10 @@ export function PaymentRedirect() {
         setError("Невалідні дані для оплати");
         return;
       }
+
+      // Extract order number from fields
+      const orderRef = fields.orderReference || "";
+      setOrderNumber(orderRef);
 
       const form = formRef.current;
       if (!form) return;
@@ -73,7 +79,18 @@ export function PaymentRedirect() {
   return (
     <div className="max-w-md mx-auto px-4 py-16 text-center">
       <Spinner className="mx-auto mb-4 h-8 w-8" />
-      <p className="text-gray-600">Переадресація на сторінку оплати...</p>
+      <p className="text-gray-600 mb-6">Переадресація на сторінку оплати...</p>
+      {orderNumber && (
+        <p className="text-sm text-gray-400 mb-4">
+          Замовлення: <span className="font-mono">{orderNumber}</span>
+        </p>
+      )}
+      <Link
+        href={`/checkout/success?order=${orderNumber}`}
+        className="text-sm text-green-600 hover:underline"
+      >
+        Вже оплатили? Натисніть тут
+      </Link>
       <form ref={formRef} style={{ display: "none" }} />
     </div>
   );
