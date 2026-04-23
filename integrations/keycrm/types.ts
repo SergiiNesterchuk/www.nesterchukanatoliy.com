@@ -1,0 +1,66 @@
+export interface KeyCRMBuyer {
+  id?: number;
+  full_name: string;
+  phone: string;
+  email?: string;
+  source_id?: number;
+}
+
+export interface KeyCRMOrderProduct {
+  name: string;
+  sku?: string;
+  price: number;
+  quantity: number;
+  picture?: string;
+}
+
+export interface KeyCRMOrderCreate {
+  source_id: number;
+  buyer: KeyCRMBuyer;
+  products: KeyCRMOrderProduct[];
+  shipping: {
+    delivery_service: string;
+    tracking_code?: string;
+    shipping_address_city?: string;
+    shipping_address?: string;
+    recipient_full_name: string;
+    recipient_phone: string;
+  };
+  payments?: Array<{
+    payment_method: string;
+    amount: number;
+    status: string;
+    description?: string;
+  }>;
+  manager_comment?: string;
+  buyer_comment?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_term?: string;
+  utm_content?: string;
+  custom_fields?: Record<string, string>;
+}
+
+export interface KeyCRMOrderResponse {
+  id: number;
+  source_id: number;
+  buyer_id: number;
+  status_id: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KeyCRMBuyerResponse {
+  id: number;
+  full_name: string;
+  phone: string[];
+  email: string[];
+}
+
+export interface KeyCRMPaymentAttach {
+  payment_method: string;
+  amount: number;
+  status: string;
+  description?: string;
+}
