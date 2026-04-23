@@ -33,6 +33,12 @@ export class WayForPayAdapter implements PaymentProviderInterface {
     customerEmail?: string;
     items: Array<{ name: string; quantity: number; price: number }>;
   }): Promise<PaymentSession> {
+    if (!this.merchantAccount || !this.merchantSecret || !this.merchantDomain) {
+      throw new Error(
+        "WayForPay not configured. Set WAYFORPAY_MERCHANT_ACCOUNT, WAYFORPAY_MERCHANT_SECRET, WAYFORPAY_MERCHANT_DOMAIN in environment variables."
+      );
+    }
+
     const orderDate = Math.floor(Date.now() / 1000);
     const productNames = params.items.map((i) => i.name);
     const productPrices = params.items.map((i) => toHryvni(i.price));

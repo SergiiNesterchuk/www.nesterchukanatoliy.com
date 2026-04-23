@@ -1,8 +1,14 @@
 import Link from "next/link";
 import { Phone, Mail, MapPin } from "lucide-react";
 import { CONTACT, SOCIAL, SITE_NAME } from "@/shared/constants";
+import { PageRepository } from "@/repositories/PageRepository";
 
-export function Footer() {
+export async function Footer() {
+  let pages: { title: string; slug: string }[] = [];
+  try {
+    pages = await PageRepository.findAll();
+  } catch { /* DB unavailable */ }
+
   return (
     <footer className="bg-gray-900 text-gray-300 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-10">
@@ -21,16 +27,16 @@ export function Footer() {
             </div>
           </div>
 
-          {/* Navigation */}
+          {/* Navigation — dynamic from DB */}
           <div>
             <h3 className="text-white font-semibold mb-3">Покупцям</h3>
             <nav className="space-y-2 text-sm">
               <Link href="/katalog/" className="block hover:text-white transition-colors">Каталог</Link>
-              <Link href="/pro-nas/" className="block hover:text-white transition-colors">Про нас</Link>
-              <Link href="/oplata-i-dostavka/" className="block hover:text-white transition-colors">Оплата і доставка</Link>
-              <Link href="/kontaktna-informatsiya/" className="block hover:text-white transition-colors">Контакти</Link>
-              <Link href="/blog/" className="block hover:text-white transition-colors">Блог</Link>
-              <Link href="/umovy-vykorystannia/" className="block hover:text-white transition-colors">Умови використання</Link>
+              {pages.map((page) => (
+                <Link key={page.slug} href={`/${page.slug}/`} className="block hover:text-white transition-colors">
+                  {page.title}
+                </Link>
+              ))}
             </nav>
           </div>
 

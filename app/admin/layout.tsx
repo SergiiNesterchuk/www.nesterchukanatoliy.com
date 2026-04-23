@@ -9,10 +9,12 @@ import {
   Settings,
   ArrowLeft,
   CornerDownRight,
+  Home,
 } from "lucide-react";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/admin/banners", label: "Головна сторінка", icon: Home },
   { href: "/admin/products", label: "Товари", icon: Package },
   { href: "/admin/categories", label: "Категорії", icon: FolderOpen },
   { href: "/admin/orders", label: "Замовлення", icon: ShoppingCart },

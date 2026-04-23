@@ -3,9 +3,10 @@ import type { CategoryListItem } from "@/entities/category";
 
 interface NavigationProps {
   categories: CategoryListItem[];
+  pages: { title: string; slug: string }[];
 }
 
-export function Navigation({ categories }: NavigationProps) {
+export function Navigation({ categories, pages }: NavigationProps) {
   return (
     <nav className="hidden md:flex items-center gap-6">
       <Link
@@ -23,18 +24,15 @@ export function Navigation({ categories }: NavigationProps) {
           {cat.name}
         </Link>
       ))}
-      <Link
-        href="/pro-nas/"
-        className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
-      >
-        Про нас
-      </Link>
-      <Link
-        href="/blog/"
-        className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
-      >
-        Блог
-      </Link>
+      {pages.slice(0, 3).map((page) => (
+        <Link
+          key={page.slug}
+          href={`/${page.slug}/`}
+          className="text-sm font-medium text-gray-700 hover:text-green-600 transition-colors"
+        >
+          {page.title}
+        </Link>
+      ))}
     </nav>
   );
 }

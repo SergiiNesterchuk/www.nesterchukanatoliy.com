@@ -26,7 +26,7 @@ export default async function AdminProductEditPage({
       <h1 className="text-2xl font-bold text-gray-900 mb-6">
         Редагування: {product.name}
       </h1>
-      <ProductEditForm product={product} categories={categories} />
+      <ProductEditForm product={product} categories={categories} images={product.images} />
     </div>
   );
 }

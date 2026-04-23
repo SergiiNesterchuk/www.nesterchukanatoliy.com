@@ -8,9 +8,10 @@ import type { CategoryListItem } from "@/entities/category";
 
 interface MobileMenuProps {
   categories: CategoryListItem[];
+  pages: { title: string; slug: string }[];
 }
 
-export function MobileMenu({ categories }: MobileMenuProps) {
+export function MobileMenu({ categories, pages }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
 
   const close = () => setIsOpen(false);
@@ -51,18 +52,11 @@ export function MobileMenu({ categories }: MobileMenuProps) {
                 </Link>
               ))}
               <div className="border-t my-3" />
-              <Link href="/pro-nas/" onClick={close} className="block py-2 text-gray-700 hover:text-green-600">
-                Про нас
-              </Link>
-              <Link href="/oplata-i-dostavka/" onClick={close} className="block py-2 text-gray-700 hover:text-green-600">
-                Оплата і доставка
-              </Link>
-              <Link href="/kontaktna-informatsiya/" onClick={close} className="block py-2 text-gray-700 hover:text-green-600">
-                Контакти
-              </Link>
-              <Link href="/blog/" onClick={close} className="block py-2 text-gray-700 hover:text-green-600">
-                Блог
-              </Link>
+              {pages.map((page) => (
+                <Link key={page.slug} href={`/${page.slug}/`} onClick={close} className="block py-2 text-gray-700 hover:text-green-600">
+                  {page.title}
+                </Link>
+              ))}
             </nav>
 
             <div className="p-4 border-t space-y-3">
