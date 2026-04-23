@@ -38,12 +38,21 @@ export function errorResponse(error: unknown) {
   }
 
   if (error instanceof ZodError) {
+    // Build human-readable validation message
+    const fieldErrors = error.issues.map((i) => {
+      const field = i.path.join(".");
+      return field ? `${field}: ${i.message}` : i.message;
+    });
+    const message = fieldErrors.length > 0
+      ? `Помилка валідації: ${fieldErrors.slice(0, 3).join("; ")}`
+      : "Невірні дані";
+
     return NextResponse.json<ApiResponse<never>>(
       {
         success: false,
         error: {
           code: "VALIDATION_ERROR",
-          message: "Invalid request data",
+          message,
           details: { issues: error.issues as unknown as Record<string, unknown> },
         },
       },

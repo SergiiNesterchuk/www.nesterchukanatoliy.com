@@ -22,6 +22,12 @@ export const GET = adminGuard(async (req: NextRequest) => {
 export const POST = adminGuard(async (req: NextRequest) => {
   try {
     const body = await req.json();
+
+    // Preprocess empty strings for optional numeric fields
+    if (body.compareAtPrice === "" || body.compareAtPrice === null) body.compareAtPrice = undefined;
+    if (body.quantity === "" || body.quantity === null) body.quantity = undefined;
+    if (body.sortOrder === "") body.sortOrder = 0;
+
     const data = productCreateSchema.parse(body);
 
     const existing = await prisma.product.findFirst({

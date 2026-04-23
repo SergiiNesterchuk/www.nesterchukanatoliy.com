@@ -33,6 +33,12 @@ export const PUT = adminGuard(async (
   try {
     const { id } = await params;
     const body = await req.json();
+
+    // Preprocess: convert empty strings to null for optional numeric fields
+    if (body.compareAtPrice === "" || body.compareAtPrice === null) body.compareAtPrice = undefined;
+    if (body.quantity === "" || body.quantity === null) body.quantity = undefined;
+    if (body.sortOrder === "") body.sortOrder = 0;
+
     const data = productUpdateSchema.parse(body);
 
     if (data.slug) {
