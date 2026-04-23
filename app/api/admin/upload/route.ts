@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { uploadFile } from "@/shared/storage";
 
 export async function POST(request: NextRequest) {
   const token = request.cookies.get("admin_token")?.value;
@@ -19,28 +18,16 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const ext = path.extname(file.name).toLowerCase();
-    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif", ".svg"];
-    if (!allowed.includes(ext)) {
-      return NextResponse.json(
-        { success: false, error: { message: `Тип файлу ${ext} не підтримується` } },
-        { status: 400 }
-      );
-    }
-
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-
-    const filePath = path.join(uploadDir, fileName);
-    await writeFile(filePath, buffer);
+    // Upload to cloud storage
+    const url = await uploadFile(buffer, file.name, "uploads");
 
     return NextResponse.json({
       success: true,
-      data: { url: `/api/uploads/${fileName}`, fileName },
+      data: { url, fileName: file.name },
     });
   } catch (error) {
-    console.error("Upload error:", error);
-    return NextResponse.json({ success: false, error: { message: "Upload failed" } }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Upload failed";
+    console.error("Upload error:", message);
+    return NextResponse.json({ success: false, error: { message } }, { status: 500 });
   }
 }

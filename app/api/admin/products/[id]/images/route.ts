@@ -2,8 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/shared/db";
 import { adminGuard } from "@/shared/admin-auth";
 import { successResponse, errorResponse } from "@/shared/api-response";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { uploadFile } from "@/shared/storage";
 
 export const POST = adminGuard(async (
   req: NextRequest,
@@ -18,20 +17,11 @@ export const POST = adminGuard(async (
       return errorResponse(new Error("Файл не обрано"));
     }
 
-    const ext = path.extname(file.name).toLowerCase();
-    const allowed = [".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"];
-    if (!allowed.includes(ext)) {
-      return errorResponse(new Error(`Тип ${ext} не підтримується`));
-    }
-
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadDir, { recursive: true });
-    await writeFile(path.join(uploadDir, fileName), buffer);
 
-    const imageUrl = `/api/uploads/${fileName}`;
+    // Upload to cloud storage (S3/R2)
+    const imageUrl = await uploadFile(buffer, file.name, `products/${id}`);
 
     const maxSort = await prisma.productImage.findFirst({
       where: { productId: id },
@@ -43,7 +33,7 @@ export const POST = adminGuard(async (
       data: {
         productId: id,
         url: imageUrl,
-        alt: file.name.replace(ext, ""),
+        alt: file.name.replace(/\.\w+$/, ""),
         sortOrder: (maxSort?.sortOrder ?? -1) + 1,
       },
     });
