@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { Trash2 } from "lucide-react";
 import { QuantitySelector } from "@/components/ui/QuantitySelector";
@@ -19,7 +18,7 @@ export function CartItem({ item, onUpdateQuantity, onRemove }: CartItemProps) {
       {/* Image */}
       <Link href={`/${item.productSlug}/`} className="relative w-16 h-16 rounded-lg overflow-hidden bg-gray-100 flex-shrink-0">
         {item.imageUrl ? (
-          <Image src={item.imageUrl} alt={item.name} fill sizes="64px" className="object-cover" />
+          <img src={item.imageUrl} alt={item.name} className="absolute inset-0 w-full h-full object-cover" />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-gray-300">
             <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">

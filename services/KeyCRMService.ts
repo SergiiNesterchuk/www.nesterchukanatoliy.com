@@ -116,7 +116,7 @@ export class KeyCRMService {
     if (!order || !order.keycrmOrderId) return;
 
     try {
-      await this.client.request(
+      const result = await this.client.request<{ id?: number }>(
         "POST",
         `/order/${order.keycrmOrderId}/payment`,
         {
@@ -131,9 +131,19 @@ export class KeyCRMService {
         orderId
       );
 
+      // Save KeyCRM payment ID for future refund sync
+      if (result?.id) {
+        const { prisma } = await import("@/shared/db");
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { keycrmPaymentId: String(result.id) },
+        });
+      }
+
       logger.info("Payment attached in KeyCRM", {
         orderId,
         keycrmOrderId: order.keycrmOrderId,
+        keycrmPaymentId: result?.id,
       });
     } catch (error) {
       logger.warn("Failed to attach payment in KeyCRM", {
@@ -144,27 +154,53 @@ export class KeyCRMService {
   }
 
   /**
-   * Sync payment reversal (declined/refunded/cancelled) to KeyCRM.
-   * Does NOT create a new order — only updates existing KeyCRM order.
+   * Sync payment refund/cancellation to KeyCRM.
+   * Updates existing payment record or adds refund comment.
    */
-  async syncPaymentReversal(orderId: string): Promise<void> {
+  async syncPaymentRefund(orderId: string): Promise<void> {
     const order = await OrderRepository.findById(orderId);
-    if (!order) return;
+    if (!order || !order.keycrmOrderId) return;
 
-    // Can only update if order already exists in KeyCRM
-    if (!order.keycrmOrderId) {
-      logger.info("No KeyCRM order to update reversal for", { orderId });
+    // Idempotency: if already synced as refunded, skip
+    if (order.keycrmSyncStatus === "synced" && order.paymentStatus === "refunded") {
       return;
     }
 
     try {
-      // Add comment about payment reversal
+      let refundSynced = false;
+
+      // If we have keycrmPaymentId, try to update the payment status
+      if (order.keycrmPaymentId) {
+        try {
+          await this.client.request(
+            "PUT",
+            `/order/${order.keycrmOrderId}/payment/${order.keycrmPaymentId}`,
+            { status: "canceled" },
+            "order",
+            orderId
+          );
+          refundSynced = true;
+          logger.info("Payment refund synced via payment update", {
+            orderId,
+            keycrmPaymentId: order.keycrmPaymentId,
+          });
+        } catch (e) {
+          logger.warn("Payment update endpoint failed, falling back to comment", {
+            orderId,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+
+      // Always update order comment with refund info
+      const commentText = refundSynced
+        ? `Оплата WayForPay скасована/повернена. Статус: ${order.paymentStatus}. Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(order.total / 100).toFixed(2)} UAH. Фінансовий статус у KeyCRM синхронізовано.`
+        : `Увага: платіж WayForPay повернено (${order.paymentStatus}). Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(order.total / 100).toFixed(2)} UAH. Потрібна ручна перевірка фінансового запису.`;
+
       await this.client.request(
         "PUT",
         `/order/${order.keycrmOrderId}`,
-        {
-          manager_comment: `Оплата скасована/відхилена. Статус: ${order.paymentStatus}. ${order.externalPaymentId ? `WayForPay ID: ${order.externalPaymentId}` : ""}`,
-        },
+        { manager_comment: commentText },
         "order",
         orderId
       );
@@ -174,20 +210,27 @@ export class KeyCRMService {
         keycrmSyncError: null,
       });
 
-      logger.info("Payment reversal synced to KeyCRM", {
+      logger.info("Payment refund info synced to KeyCRM", {
         orderId,
         keycrmOrderId: order.keycrmOrderId,
-        paymentStatus: order.paymentStatus,
+        refundSynced,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await OrderRepository.updateKeycrmSync(orderId, {
         keycrmSyncStatus: "failed",
-        keycrmSyncError: `Reversal sync: ${message.substring(0, 400)}`,
+        keycrmSyncError: `Refund sync: ${message.substring(0, 400)}`,
         keycrmSyncRetries: { increment: 1 },
       });
-      logger.error("Payment reversal sync failed", { orderId, error: message.substring(0, 300) });
+      logger.error("Payment refund sync failed", { orderId, error: message.substring(0, 300) });
     }
+  }
+
+  /**
+   * Sync payment reversal — delegates to syncPaymentRefund for full financial sync.
+   */
+  async syncPaymentReversal(orderId: string): Promise<void> {
+    return this.syncPaymentRefund(orderId);
   }
 
   async retrySync(orderId: string): Promise<{ success: boolean; error?: string }> {

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { cn } from "@/shared/cn";
 import type { ProductImage } from "@/entities/product";
 
@@ -29,13 +28,10 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
     <div className="space-y-3">
       {/* Main image */}
       <div className="relative aspect-square bg-gray-50 rounded-xl overflow-hidden">
-        <Image
+        <img
           src={activeImage.url}
           alt={activeImage.alt || productName}
-          fill
-          sizes="(max-width: 768px) 100vw, 50vw"
-          className="object-contain"
-          priority
+          className="absolute inset-0 w-full h-full object-contain"
         />
       </div>
 
@@ -51,12 +47,11 @@ export function ProductGallery({ images, productName }: ProductGalleryProps) {
                 index === activeIndex ? "border-green-600" : "border-transparent hover:border-gray-300"
               )}
             >
-              <Image
+              <img
                 src={image.url}
                 alt={image.alt || `${productName} - фото ${index + 1}`}
-                fill
-                sizes="80px"
-                className="object-cover"
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
               />
             </button>
           ))}

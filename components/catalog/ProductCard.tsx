@@ -1,5 +1,4 @@
 import Link from "next/link";
-import Image from "next/image";
 import { PriceDisplay } from "./PriceDisplay";
 import { StockBadge } from "./StockBadge";
 import { AddToCartButton } from "@/components/cart/AddToCartButton";
@@ -17,15 +16,14 @@ export function ProductCard({ product }: ProductCardProps) {
     <article className="group bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
       <Link href={`/${product.slug}/`} className="block relative aspect-[3/4] bg-gray-50">
         {product.coverImage ? (
-          <Image
+          <img
             src={product.coverImage}
             alt={product.name}
-            fill
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
             className={cn(
-              "object-cover transition-transform group-hover:scale-105",
+              "absolute inset-0 w-full h-full object-cover transition-transform group-hover:scale-105",
               outOfStock && "grayscale opacity-60"
             )}
+            loading="lazy"
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-gray-300">

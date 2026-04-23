@@ -86,6 +86,7 @@ model Order {
   externalPaymentId  String?
   keycrmOrderId      String?
   keycrmBuyerId      String?
+  keycrmPaymentId    String?
   keycrmSyncStatus   String       @default("pending") // pending, synced, failed, not_required
   keycrmSyncError    String?
   keycrmSyncRetries  Int          @default(0)
