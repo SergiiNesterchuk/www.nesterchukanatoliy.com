@@ -88,36 +88,21 @@ export function CheckoutForm() {
 
       clearCart();
 
-      // If payment provider returned form fields — auto-submit to WayForPay
+      // If payment provider returned form fields — redirect to pay page
+      // Using window.location to avoid Next.js App Router form interception
       if (data.data.payment?.formFields) {
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = data.data.payment.url;
-        const fields = data.data.payment.formFields as Record<string, string | string[]>;
-        for (const [key, value] of Object.entries(fields)) {
-          if (Array.isArray(value)) {
-            value.forEach((v) => {
-              const input = document.createElement("input");
-              input.type = "hidden";
-              input.name = `${key}[]`;
-              input.value = v;
-              form.appendChild(input);
-            });
-          } else {
-            const input = document.createElement("input");
-            input.type = "hidden";
-            input.name = key;
-            input.value = value;
-            form.appendChild(input);
-          }
-        }
-        document.body.appendChild(form);
-        form.submit();
+        const paymentData = encodeURIComponent(
+          JSON.stringify({
+            url: data.data.payment.url,
+            fields: data.data.payment.formFields,
+          })
+        );
+        window.location.href = `/checkout/pay?data=${paymentData}`;
         return;
       }
 
       // No payment — redirect to success
-      router.push(`/checkout/success?order=${data.data.orderNumber}`);
+      window.location.href = `/checkout/success?order=${data.data.orderNumber}`;
     } catch {
       setGeneralError("Помилка з'єднання. Спробуйте ще раз.");
     } finally {
