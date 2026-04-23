@@ -16,10 +16,16 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [products, categories] = await Promise.all([
-    ProductService.getAll(),
-    CategoryService.getAll(),
-  ]);
+  let products: Awaited<ReturnType<typeof ProductService.getAll>> = [];
+  let categories: Awaited<ReturnType<typeof CategoryService.getAll>> = [];
+  try {
+    [products, categories] = await Promise.all([
+      ProductService.getAll(),
+      CategoryService.getAll(),
+    ]);
+  } catch (error) {
+    console.error("Homepage data fetch failed:", error instanceof Error ? error.message : error);
+  }
 
   return (
     <>

@@ -30,17 +30,21 @@ type SlugEntity =
   | null;
 
 async function resolveSlug(slug: string): Promise<SlugEntity> {
-  // Check category first
-  const category = await CategoryRepository.findBySlug(slug);
-  if (category) return { type: "category", slug };
+  try {
+    // Check category first
+    const category = await CategoryRepository.findBySlug(slug);
+    if (category) return { type: "category", slug };
 
-  // Check product
-  const product = await ProductRepository.findBySlug(slug);
-  if (product) return { type: "product", slug };
+    // Check product
+    const product = await ProductRepository.findBySlug(slug);
+    if (product) return { type: "product", slug };
 
-  // Check page
-  const page = await PageRepository.findBySlug(slug);
-  if (page) return { type: "page", slug };
+    // Check page
+    const page = await PageRepository.findBySlug(slug);
+    if (page) return { type: "page", slug };
+  } catch (error) {
+    console.error("Slug resolution failed:", slug, error instanceof Error ? error.message : error);
+  }
 
   return null;
 }

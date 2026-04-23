@@ -27,7 +27,13 @@ export default async function CatalogPage({
   const sort = (params.sort || "popularity") as SortOption;
   const page = parseInt(params.page || "1", 10);
 
-  const { items: products } = await ProductService.getList({ sort, page });
+  let products: Awaited<ReturnType<typeof ProductService.getList>>["items"] = [];
+  try {
+    const result = await ProductService.getList({ sort, page });
+    products = result.items;
+  } catch (error) {
+    console.error("Catalog fetch failed:", error instanceof Error ? error.message : error);
+  }
 
   const breadcrumbItems = [{ label: "Каталог" }];
 
