@@ -21,7 +21,7 @@ export const POST = adminGuard(async (
     const buffer = Buffer.from(bytes);
 
     // Upload to cloud storage (S3/R2)
-    const imageUrl = await uploadFile(buffer, file.name, `products/${id}`);
+    const imageUrl = await uploadFile(buffer, file.name, `products/${id}`, file.type);
 
     const maxSort = await prisma.productImage.findFirst({
       where: { productId: id },

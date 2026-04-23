@@ -50,7 +50,8 @@ const MIME_MAP: Record<string, string> = {
 export async function uploadFile(
   buffer: Buffer,
   originalName: string,
-  folder: string = "products"
+  folder: string = "products",
+  clientMimeType?: string
 ): Promise<string> {
   const ext = originalName.toLowerCase().match(/\.\w+$/)?.[0] || ".jpg";
 
@@ -74,7 +75,12 @@ export async function uploadFile(
 
   const uniqueId = crypto.randomUUID();
   const key = `${folder}/${uniqueId}${ext}`;
-  const contentType = MIME_MAP[ext] || "application/octet-stream";
+
+  // Priority: client-provided MIME → extension lookup → fallback
+  const contentType =
+    (clientMimeType && clientMimeType.startsWith("image/") ? clientMimeType : null)
+    || MIME_MAP[ext]
+    || "application/octet-stream";
 
   await client.send(
     new PutObjectCommand({
@@ -82,6 +88,7 @@ export async function uploadFile(
       Key: key,
       Body: buffer,
       ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
     })
   );
 

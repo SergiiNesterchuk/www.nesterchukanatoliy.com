@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(bytes);
 
     // Upload to cloud storage
-    const url = await uploadFile(buffer, file.name, "uploads");
+    const url = await uploadFile(buffer, file.name, "uploads", file.type);
 
     return NextResponse.json({
       success: true,
