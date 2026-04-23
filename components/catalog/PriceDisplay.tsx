@@ -9,7 +9,8 @@ interface PriceDisplayProps {
 }
 
 export function PriceDisplay({ price, compareAtPrice, className, size = "md" }: PriceDisplayProps) {
-  const hasDiscount = compareAtPrice && compareAtPrice > price;
+  const numericOldPrice = typeof compareAtPrice === "string" ? Number(compareAtPrice) : compareAtPrice;
+  const hasDiscount = typeof numericOldPrice === "number" && !isNaN(numericOldPrice) && numericOldPrice > 0 && numericOldPrice > price;
 
   return (
     <div className={cn("flex items-baseline gap-2", className)}>
@@ -23,9 +24,9 @@ export function PriceDisplay({ price, compareAtPrice, className, size = "md" }: 
       >
         {formatPrice(price)}
       </span>
-      {hasDiscount && (
-        <span className="text-gray-400 line-through text-sm">{formatPrice(compareAtPrice)}</span>
-      )}
+      {hasDiscount ? (
+        <span className="text-gray-400 line-through text-sm">{formatPrice(numericOldPrice)}</span>
+      ) : null}
     </div>
   );
 }

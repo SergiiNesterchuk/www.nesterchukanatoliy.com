@@ -41,7 +41,7 @@ export function ProductCard({ product }: ProductCardProps) {
         </Link>
         <PriceDisplay price={product.price} compareAtPrice={product.compareAtPrice} />
         <StockBadge stockStatus={product.stockStatus} />
-        <AddToCartButton product={product} size="sm" />
+        {!outOfStock && <AddToCartButton product={product} size="sm" />}
       </div>
     </article>
   );
