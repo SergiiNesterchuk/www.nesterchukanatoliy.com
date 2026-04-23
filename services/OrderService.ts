@@ -5,7 +5,7 @@ import { getPaymentProvider } from "@/integrations/payment/PaymentProviderFactor
 import type { OrderCreate } from "@/entities/order";
 import { ValidationError, PaymentError } from "@/shared/errors";
 import { createLogger } from "@/shared/logger";
-import { SITE_URL } from "@/shared/constants";
+import { buildAbsoluteUrl } from "@/shared/url";
 
 const logger = createLogger("OrderService");
 
@@ -96,8 +96,8 @@ export class OrderService {
       amount: order.total,
       currency: order.currency,
       description: `Замовлення ${order.orderNumber}`,
-      returnUrl: `${SITE_URL}/checkout/success?order=${order.orderNumber}`,
-      callbackUrl: `${SITE_URL}/api/payment/callback`,
+      returnUrl: buildAbsoluteUrl(`/checkout/success?order=${order.orderNumber}`),
+      callbackUrl: buildAbsoluteUrl("/api/payment/callback"),
       customerEmail: order.customerEmail || undefined,
       items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
     });

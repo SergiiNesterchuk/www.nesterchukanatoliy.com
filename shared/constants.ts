@@ -1,5 +1,8 @@
 export const SITE_NAME = "Магазин Анатолія Нестерчука";
-export const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://nesterchukanatoliy.com";
+
+// Normalize: trim whitespace, remove trailing slash — prevents %20 in URLs
+const rawSiteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://nesterchukanatoliy.com").trim();
+export const SITE_URL = rawSiteUrl.replace(/\/+$/, "");
 export const SITE_DESCRIPTION =
   "Натуральний яблучний оцет власного виробництва та бордоська суміш для саду. Замовляйте на сайті.";
 

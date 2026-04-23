@@ -9,8 +9,8 @@ export class KeyCRMClient {
   private apiKey: string;
 
   constructor() {
-    this.baseUrl = process.env.KEYCRM_BASE_URL || "https://openapi.keycrm.app/v1";
-    this.apiKey = process.env.KEYCRM_API_KEY || "";
+    this.baseUrl = (process.env.KEYCRM_BASE_URL || "https://openapi.keycrm.app/v1").trim().replace(/\/+$/, "");
+    this.apiKey = (process.env.KEYCRM_API_KEY || "").trim();
   }
 
   async request<T>(
@@ -22,6 +22,14 @@ export class KeyCRMClient {
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const startTime = Date.now();
+
+    logger.info("KeyCRM outbound request", {
+      method,
+      endpoint,
+      entityType,
+      entityId,
+      hasBody: !!body,
+    });
 
     try {
       const response = await fetch(url, {
@@ -37,7 +45,6 @@ export class KeyCRMClient {
       const durationMs = Date.now() - startTime;
       const responseText = await response.text();
 
-      // Log the request
       await IntegrationLogRepository.create({
         integration: "keycrm",
         direction: "outbound",
@@ -49,18 +56,25 @@ export class KeyCRMClient {
         responseBody: responseText.substring(0, 5000),
         responseStatus: response.status,
         durationMs,
+        errorMessage: response.ok ? undefined : `HTTP ${response.status}: ${responseText.substring(0, 300)}`,
       });
 
       if (!response.ok) {
+        const isRetryable = response.status >= 500 || response.status === 429;
+
         logger.error("KeyCRM API error", {
           endpoint,
           status: response.status,
+          isRetryable,
           response: responseText.substring(0, 500),
+          entityType,
+          entityId,
         });
+
         throw new IntegrationError(
           "KeyCRM",
           `API returned ${response.status}: ${responseText.substring(0, 200)}`,
-          { status: response.status }
+          { status: response.status, isRetryable }
         );
       }
 
@@ -78,11 +92,11 @@ export class KeyCRMClient {
         endpoint,
         entityType,
         entityId,
-        errorMessage,
+        errorMessage: errorMessage.substring(0, 500),
         durationMs,
       });
 
-      throw new IntegrationError("KeyCRM", errorMessage);
+      throw new IntegrationError("KeyCRM", errorMessage, { isRetryable: true });
     }
   }
 }

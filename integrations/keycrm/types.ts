@@ -39,7 +39,6 @@ export interface KeyCRMOrderCreate {
   utm_campaign?: string;
   utm_term?: string;
   utm_content?: string;
-  custom_fields?: Record<string, string>;
 }
 
 export interface KeyCRMOrderResponse {

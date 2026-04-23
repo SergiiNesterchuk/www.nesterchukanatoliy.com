@@ -71,9 +71,20 @@ export class WayForPayAdapter implements PaymentProviderInterface {
       language: "UA",
     };
 
+    // Validate URLs before creating session
+    if (params.returnUrl.includes("%20") || params.callbackUrl.includes("%20")) {
+      throw new Error(
+        `Payment URLs contain encoded spaces. returnUrl: ${params.returnUrl}, callbackUrl: ${params.callbackUrl}. Fix NEXT_PUBLIC_SITE_URL.`
+      );
+    }
+
     logger.info("Payment session created", {
       orderNumber: params.orderNumber,
       amount,
+      returnUrl: params.returnUrl,
+      serviceUrl: params.callbackUrl,
+      merchantAccount: this.merchantAccount,
+      domain: this.merchantDomain,
     });
 
     return {

@@ -2,7 +2,7 @@ import { KeyCRMClient } from "@/integrations/keycrm/KeyCRMClient";
 import { KeyCRMMapper } from "@/integrations/keycrm/KeyCRMMapper";
 import type { KeyCRMOrderResponse, KeyCRMBuyerResponse } from "@/integrations/keycrm/types";
 import { OrderRepository } from "@/repositories/OrderRepository";
-import { RetryableSyncError, FatalSyncError } from "@/shared/errors";
+import { RetryableSyncError, FatalSyncError, IntegrationError } from "@/shared/errors";
 import { createLogger } from "@/shared/logger";
 
 const logger = createLogger("KeyCRMService");
@@ -88,6 +88,8 @@ export class KeyCRMService {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const details = error instanceof IntegrationError ? error.details : undefined;
+      const isRetryable = (details as Record<string, unknown>)?.isRetryable !== false;
 
       await OrderRepository.updateKeycrmSync(orderId, {
         keycrmSyncStatus: "failed",
@@ -95,7 +97,17 @@ export class KeyCRMService {
         keycrmSyncRetries: { increment: 1 },
       });
 
-      throw new RetryableSyncError(`Failed to sync order ${orderId}: ${message}`);
+      logger.error("KeyCRM sync failed", {
+        orderId,
+        isRetryable,
+        error: message.substring(0, 300),
+      });
+
+      if (isRetryable) {
+        throw new RetryableSyncError(`Failed to sync order ${orderId}: ${message}`);
+      } else {
+        throw new FatalSyncError(`Non-retryable sync error for ${orderId}: ${message}`);
+      }
     }
   }
 
