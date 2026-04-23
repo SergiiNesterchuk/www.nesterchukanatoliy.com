@@ -14,10 +14,8 @@ dist
 .cache
 coverage
 
-# Env files
-.env
-.env.local
-.env.*.local
+# Env files (ALL of them — Railpack parses .env* and treats empty values as missing secrets)
+.env*
 
 # Logs
 *.log
