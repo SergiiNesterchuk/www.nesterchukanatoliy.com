@@ -51,6 +51,8 @@ E-commerce store for Anatoliy Nesterchuk — natural apple cider vinegar and Bor
 | `WAYFORPAY_MERCHANT_SECRET` | — | WayForPay HMAC secret for signature verification. |
 | `WAYFORPAY_MERCHANT_DOMAIN` | — | Domain registered with WayForPay (e.g. `nesterchukanatoliy.com`). |
 | `NOVAPOSHTA_API_KEY` | — | Nova Poshta API key for branch search (future). |
+| `CRM_SYNC_ENABLED` | `true` | Set `false` to disable KeyCRM sync. Orders stay local only. |
+| `PAYMENTS_ENABLED` | `true` | Set `false` to disable WayForPay. Checkout skips payment. |
 
 ---
 
@@ -423,17 +425,53 @@ curl -X POST "https://SITE_URL/api/revalidate?action=sync&secret=ADMIN_JWT_SECRE
 
 ---
 
-## 14. Future Improvements
+## 14. Admin Panel
+
+### Available sections
+
+| Section | URL | Features |
+|---------|-----|----------|
+| Dashboard | `/admin` | Stats: products, orders, pending sync, failed sync, errors |
+| Products | `/admin/products` | List, create, edit, delete. SKU, price, stock, SEO, gallery |
+| Categories | `/admin/categories` | List, create, edit, delete. Slug, SEO |
+| Orders | `/admin/orders` | List with search, detail view, payment events, CRM sync, retry |
+| Pages | `/admin/pages` | List, create, edit, delete. HTML content, SEO |
+| Redirects | `/admin/redirects` | Add/delete 301/302 redirects |
+| Integration Logs | `/admin/integration-logs` | Health dashboard, recent logs, retry sync action |
+| Settings | `/admin/settings` | Editable key-value pairs |
+
+### Admin API endpoints
+
+All admin APIs require `admin_token` cookie (set on login).
+
+```
+GET/POST     /api/admin/products
+GET/PUT/DEL  /api/admin/products/[id]
+GET/POST     /api/admin/categories
+PUT/DEL      /api/admin/categories/[id]
+GET/POST     /api/admin/pages
+GET/PUT/DEL  /api/admin/pages/[id]
+GET/PUT      /api/admin/settings
+GET/POST     /api/admin/redirects
+DEL          /api/admin/redirects/[id]
+GET          /api/admin/orders
+GET          /api/admin/orders/[id]
+POST         /api/admin/orders/[id]/retry-sync
+POST         /api/admin/upload
+```
+
+---
+
+## 15. Future Improvements
 
 | Priority | Task |
 |----------|------|
-| High | Connect WayForPay with real merchant credentials |
-| High | Connect KeyCRM with production API key |
 | High | Add Nova Poshta API for branch/city search in checkout |
+| High | Email notifications (order confirmation, shipping updates) |
 | Medium | Add user accounts and order history |
 | Medium | Add product search (MeiliSearch or PostgreSQL FTS) |
 | Medium | Rate limiting on checkout and webhook endpoints |
-| Medium | Email notifications (order confirmation, shipping) |
+| Medium | Rich text editor for product descriptions and pages |
 | Low | Image upload to Cloudinary/S3 instead of local `/public` |
 | Low | Add product reviews |
 | Low | Add wishlist/favorites |

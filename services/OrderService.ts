@@ -18,17 +18,12 @@ function generateOrderNumber(): string {
 
 export class OrderService {
   static async createOrder(input: OrderCreate) {
-    // Idempotency check
     const existing = await OrderRepository.findByIdempotencyKey(input.idempotencyKey);
     if (existing) {
-      logger.info("Duplicate order attempt blocked", {
-        idempotencyKey: input.idempotencyKey,
-        existingOrderId: existing.id,
-      });
+      logger.info("Duplicate order blocked by idempotency", { idempotencyKey: input.idempotencyKey });
       return existing;
     }
 
-    // Validate products and build line items
     const productIds = input.items.map((i) => i.productId);
     const products = await ProductRepository.findByIds(productIds);
     const productMap = new Map(products.map((p) => [p.id, p]));
@@ -38,16 +33,10 @@ export class OrderService {
 
     for (const item of input.items) {
       const product = productMap.get(item.productId);
-      if (!product) {
-        throw new ValidationError(`Товар не знайдено: ${item.productId}`);
-      }
-      if (product.stockStatus !== "in_stock") {
-        throw new ValidationError(`Товар "${product.name}" немає в наявності`);
-      }
+      if (!product) throw new ValidationError(`Товар не знайдено: ${item.productId}`);
+      if (product.stockStatus !== "in_stock") throw new ValidationError(`"${product.name}" немає в наявності`);
       if (product.quantity !== null && product.quantity < item.quantity) {
-        throw new ValidationError(
-          `Товар "${product.name}" — доступно лише ${product.quantity} шт.`
-        );
+        throw new ValidationError(`"${product.name}" — доступно лише ${product.quantity} шт.`);
       }
 
       const lineTotal = product.price * item.quantity;
@@ -64,8 +53,6 @@ export class OrderService {
       });
     }
 
-    const total = subtotal; // No delivery cost / discounts in MVP
-
     const order = await OrderRepository.create({
       orderNumber: generateOrderNumber(),
       customerName: input.customerName,
@@ -79,7 +66,7 @@ export class OrderService {
       comment: input.comment,
       paymentMethod: input.paymentMethod,
       subtotal,
-      total,
+      total: subtotal,
       idempotencyKey: input.idempotencyKey,
       utmSource: input.utmSource,
       utmMedium: input.utmMedium,
@@ -89,16 +76,16 @@ export class OrderService {
       items: orderItems,
     });
 
-    logger.info("Order created", {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      total: order.total,
-    });
-
+    logger.info("Order created", { orderId: order.id, orderNumber: order.orderNumber, total: order.total });
     return order;
   }
 
   static async createPaymentForOrder(orderId: string) {
+    if (process.env.PAYMENTS_ENABLED === "false") {
+      logger.info("Payments disabled, skipping", { orderId });
+      return null;
+    }
+
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new PaymentError("Замовлення не знайдено");
 
@@ -112,11 +99,7 @@ export class OrderService {
       returnUrl: `${SITE_URL}/checkout/success?order=${order.orderNumber}`,
       callbackUrl: `${SITE_URL}/api/payment/callback`,
       customerEmail: order.customerEmail || undefined,
-      items: order.items.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-      })),
+      items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
     });
 
     await IntegrationLogRepository.create({
@@ -126,11 +109,6 @@ export class OrderService {
       endpoint: "createPaymentSession",
       entityType: "order",
       entityId: order.id,
-      requestBody: JSON.stringify({
-        orderNumber: order.orderNumber,
-        amount: order.total,
-      }),
-      responseStatus: 200,
     });
 
     return session;
@@ -139,13 +117,8 @@ export class OrderService {
   static async handlePaymentCallback(rawBody: string, headers: Record<string, string>) {
     const provider = getPaymentProvider("wayforpay");
 
-    const result = await provider.verifyCallback({
-      provider: "wayforpay",
-      rawBody,
-      headers,
-    });
+    const result = await provider.verifyCallback({ provider: "wayforpay", rawBody, headers });
 
-    // Log the callback
     await IntegrationLogRepository.create({
       integration: "wayforpay",
       direction: "inbound",
@@ -153,47 +126,36 @@ export class OrderService {
       endpoint: "payment/callback",
       entityType: "order",
       entityId: result.orderNumber,
-      requestBody: rawBody,
+      requestBody: rawBody.substring(0, 5000),
       responseStatus: result.signatureValid ? 200 : 401,
       errorMessage: result.signatureValid ? undefined : "Invalid signature",
     });
 
     if (!result.signatureValid) {
-      logger.warn("Invalid payment webhook signature", {
-        orderNumber: result.orderNumber,
-      });
-      return { accepted: false };
+      logger.warn("Invalid payment webhook signature", { orderNumber: result.orderNumber });
+      return { accepted: false, orderNumber: result.orderNumber };
     }
 
-    // Find order
     const order = await OrderRepository.findByOrderNumber(result.orderNumber);
     if (!order) {
-      logger.error("Order not found for payment callback", {
-        orderNumber: result.orderNumber,
-      });
-      return { accepted: false };
+      logger.error("Order not found for payment callback", { orderNumber: result.orderNumber });
+      return { accepted: false, orderNumber: result.orderNumber };
     }
 
-    // Idempotency: if already paid, skip
-    if (order.paymentStatus === "paid") {
-      logger.info("Payment already processed", {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-      });
-      return { accepted: true };
+    if (order.paymentStatus === "paid" && result.status === "success") {
+      return { accepted: true, orderNumber: result.orderNumber };
     }
 
-    // Record payment event
     const { prisma } = await import("@/shared/db");
     await prisma.paymentEvent.create({
       data: {
         orderId: order.id,
-        provider: result.success ? "wayforpay" : "wayforpay",
+        provider: "wayforpay",
         eventType: result.success ? "success" : "failure",
         externalId: result.externalPaymentId,
         amount: result.amount,
         currency: result.currency,
-        rawPayload: result.rawPayload,
+        rawPayload: result.rawPayload.substring(0, 10000),
         signatureValid: result.signatureValid,
       },
     });
@@ -206,27 +168,21 @@ export class OrderService {
         status: "paid",
       });
 
-      // Mark for KeyCRM sync
-      await OrderRepository.updateKeycrmSync(order.id, {
-        keycrmSyncStatus: "pending",
-      });
+      if (process.env.CRM_SYNC_ENABLED !== "false") {
+        await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.createOrder(order.id).catch((e) => {
+            logger.error("Async CRM sync failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+          });
+        });
+      }
 
-      logger.info("Payment successful", {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        amount: result.amount,
-      });
-    } else {
-      await OrderRepository.updatePaymentStatus(order.id, {
-        paymentStatus: "failed",
-      });
-
-      logger.warn("Payment failed", {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-      });
+      logger.info("Payment successful", { orderId: order.id, orderNumber: order.orderNumber });
+    } else if (result.status === "failure") {
+      await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: "failed" });
     }
 
-    return { accepted: true };
+    return { accepted: true, orderNumber: result.orderNumber };
   }
 }

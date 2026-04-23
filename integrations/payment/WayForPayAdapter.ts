@@ -6,6 +6,7 @@ import type {
   PaymentResult,
 } from "./PaymentProviderInterface";
 import { createLogger } from "@/shared/logger";
+import { toHryvni } from "@/shared/money";
 
 const logger = createLogger("WayForPay");
 
@@ -34,43 +35,45 @@ export class WayForPayAdapter implements PaymentProviderInterface {
   }): Promise<PaymentSession> {
     const orderDate = Math.floor(Date.now() / 1000);
     const productNames = params.items.map((i) => i.name);
-    const productPrices = params.items.map((i) => i.price / 100); // kopiyky to hryvni
+    const productPrices = params.items.map((i) => toHryvni(i.price));
     const productCounts = params.items.map((i) => i.quantity);
+    const amount = toHryvni(params.amount);
 
-    const signatureString = [
+    // Signature: merchantAccount;merchantDomainName;orderReference;orderDate;amount;currency;productName[i];productCount[i];productPrice[i]
+    const signatureData = [
       this.merchantAccount,
       this.merchantDomain,
       params.orderNumber,
       orderDate,
-      params.amount / 100, // kopiyky to hryvni
+      amount,
       params.currency,
       ...productNames,
       ...productCounts,
       ...productPrices,
-    ].join(";");
+    ];
+    const signature = this.hmacMd5(signatureData.join(";"));
 
-    const signature = this.hmacMd5(signatureString);
-
-    // WayForPay uses form-based redirect or API
-    // For MVP, we build a payment URL with params
-    const formData = {
+    const formFields: Record<string, string | string[]> = {
       merchantAccount: this.merchantAccount,
       merchantDomainName: this.merchantDomain,
       merchantSignature: signature,
+      merchantTransactionSecureType: "AUTO",
       orderReference: params.orderNumber,
       orderDate: orderDate.toString(),
-      amount: (params.amount / 100).toString(),
+      amount: amount.toString(),
       currency: params.currency,
       productName: productNames,
       productPrice: productPrices.map(String),
       productCount: productCounts.map(String),
       returnUrl: params.returnUrl,
       serviceUrl: params.callbackUrl,
+      orderTimeout: "900",
+      language: "UA",
     };
 
     logger.info("Payment session created", {
       orderNumber: params.orderNumber,
-      amount: params.amount,
+      amount,
     });
 
     return {
@@ -80,8 +83,8 @@ export class WayForPayAdapter implements PaymentProviderInterface {
       amount: params.amount,
       currency: params.currency,
       orderNumber: params.orderNumber,
-      ...({ formData } as Record<string, unknown>),
-    };
+      formFields,
+    } as PaymentSession & { formFields: Record<string, string | string[]> };
   }
 
   async verifyCallback(data: PaymentCallbackData): Promise<PaymentResult> {
@@ -89,16 +92,8 @@ export class WayForPayAdapter implements PaymentProviderInterface {
     try {
       parsed = JSON.parse(data.rawBody);
     } catch {
-      return {
-        success: false,
-        orderNumber: "",
-        externalPaymentId: "",
-        amount: 0,
-        currency: "UAH",
-        status: "failure",
-        rawPayload: data.rawBody,
-        signatureValid: false,
-      };
+      logger.warn("Invalid callback JSON");
+      return this.failedResult(data.rawBody);
     }
 
     const {
@@ -108,18 +103,20 @@ export class WayForPayAdapter implements PaymentProviderInterface {
       amount,
       currency,
       authCode,
+      reasonCode,
+      cardPan,
     } = parsed;
 
-    // Verify signature
+    // Response signature: merchantAccount;orderReference;amount;currency;authCode;cardPan;transactionStatus;reasonCode
     const signString = [
       this.merchantAccount,
-      orderReference,
-      amount,
-      currency,
-      authCode,
-      parsed.cardPan || "",
-      transactionStatus,
-      parsed.reasonCode || "",
+      orderReference || "",
+      amount || "",
+      currency || "",
+      authCode || "",
+      cardPan || "",
+      transactionStatus || "",
+      reasonCode || "",
     ].join(";");
 
     const expectedSignature = this.hmacMd5(signString);
@@ -129,17 +126,47 @@ export class WayForPayAdapter implements PaymentProviderInterface {
       logger.warn("Invalid webhook signature", { orderNumber: orderReference });
     }
 
-    const success = transactionStatus === "Approved" && signatureValid;
+    const isApproved = transactionStatus === "Approved";
+    const success = isApproved && signatureValid;
+
+    let status: "success" | "failure" | "pending" = "failure";
+    if (success) status = "success";
+    else if (transactionStatus === "Pending" || transactionStatus === "InProcessing") status = "pending";
 
     return {
       success,
       orderNumber: orderReference || "",
-      externalPaymentId: authCode || "",
+      externalPaymentId: authCode || parsed.transactionId || "",
       amount: Math.round(parseFloat(amount || "0") * 100),
       currency: currency || "UAH",
-      status: success ? "success" : "failure",
+      status,
       rawPayload: data.rawBody,
       signatureValid,
+    };
+  }
+
+  generateCallbackResponse(orderReference: string): string {
+    const time = Math.floor(Date.now() / 1000);
+    const signString = `${orderReference};accept;${time}`;
+    const signature = this.hmacMd5(signString);
+    return JSON.stringify({
+      orderReference,
+      status: "accept",
+      time,
+      signature,
+    });
+  }
+
+  private failedResult(rawBody: string): PaymentResult {
+    return {
+      success: false,
+      orderNumber: "",
+      externalPaymentId: "",
+      amount: 0,
+      currency: "UAH",
+      status: "failure",
+      rawPayload: rawBody,
+      signatureValid: false,
     };
   }
 

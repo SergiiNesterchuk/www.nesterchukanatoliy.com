@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Settings,
   ArrowLeft,
+  CornerDownRight,
 } from "lucide-react";
 
 const navItems = [
@@ -16,6 +17,7 @@ const navItems = [
   { href: "/admin/categories", label: "Категорії", icon: FolderOpen },
   { href: "/admin/orders", label: "Замовлення", icon: ShoppingCart },
   { href: "/admin/pages", label: "Сторінки", icon: FileText },
+  { href: "/admin/redirects", label: "Redirects", icon: CornerDownRight },
   { href: "/admin/integration-logs", label: "Інтеграції", icon: AlertCircle },
   { href: "/admin/settings", label: "Налаштування", icon: Settings },
 ];

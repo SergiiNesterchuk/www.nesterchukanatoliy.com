@@ -148,6 +148,14 @@ export class KeyCRMService {
     succeeded: number;
     failed: number;
   }> {
+    if (process.env.CRM_SYNC_ENABLED === "false") {
+      return { processed: 0, succeeded: 0, failed: 0 };
+    }
+    if (!process.env.KEYCRM_API_KEY) {
+      logger.warn("KEYCRM_API_KEY not set, skipping sync");
+      return { processed: 0, succeeded: 0, failed: 0 };
+    }
+
     const service = new KeyCRMService();
     const pendingOrders = await OrderRepository.findPendingSync(10);
 

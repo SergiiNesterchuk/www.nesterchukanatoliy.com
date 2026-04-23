@@ -28,17 +28,19 @@ export async function POST(request: NextRequest) {
       idempotencyKey: validated.idempotencyKey,
     });
 
-    // Create payment session
     const payment = await OrderService.createPaymentForOrder(order.id);
 
     return successResponse({
       orderId: order.id,
       orderNumber: order.orderNumber,
-      payment: {
-        url: payment.paymentUrl,
-        sessionId: payment.sessionId,
-        provider: payment.provider,
-      },
+      payment: payment
+        ? {
+            url: payment.paymentUrl,
+            sessionId: payment.sessionId,
+            provider: payment.provider,
+            formFields: (payment as unknown as Record<string, unknown>).formFields,
+          }
+        : null,
     });
   } catch (error) {
     return errorResponse(error);
