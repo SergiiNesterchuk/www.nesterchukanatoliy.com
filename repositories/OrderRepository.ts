@@ -100,7 +100,7 @@ export class OrderRepository {
       where: {
         keycrmSyncStatus: { in: ["pending", "failed"] },
         keycrmSyncRetries: { lt: 5 },
-        paymentStatus: "paid",
+        paymentStatus: { in: ["paid", "failed"] },
       },
       include: { items: true },
       orderBy: { createdAt: "asc" },

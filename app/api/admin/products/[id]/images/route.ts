@@ -31,7 +31,7 @@ export const POST = adminGuard(async (
     await mkdir(uploadDir, { recursive: true });
     await writeFile(path.join(uploadDir, fileName), buffer);
 
-    const imageUrl = `/uploads/${fileName}`;
+    const imageUrl = `/api/uploads/${fileName}`;
 
     const maxSort = await prisma.productImage.findFirst({
       where: { productId: id },

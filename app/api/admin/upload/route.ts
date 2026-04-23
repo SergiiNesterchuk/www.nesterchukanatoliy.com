@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { url: `/uploads/${fileName}`, fileName },
+      data: { url: `/api/uploads/${fileName}`, fileName },
     });
   } catch (error) {
     console.error("Upload error:", error);
