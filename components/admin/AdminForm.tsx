@@ -56,16 +56,40 @@ export function AdminForm({
     });
 
     try {
+      const jsonBody = JSON.stringify(body);
+
+      // Check payload size (Railway/Next.js limit ~4.5MB)
+      if (jsonBody.length > 4 * 1024 * 1024) {
+        setError("Дані занадто великі. Зменшіть розмір тексту або зображень.");
+        return;
+      }
+
       const res = await fetch(action, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: jsonBody,
       });
 
-      const data = await res.json();
+      if (res.status === 413) {
+        setError("Дані занадто великі для збереження. Зменшіть розмір контенту.");
+        return;
+      }
+
+      if (res.status === 429) {
+        setError("Забагато запитів. Зачекайте і спробуйте ще раз.");
+        return;
+      }
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        setError(`Помилка сервера (${res.status}). Спробуйте ще раз.`);
+        return;
+      }
 
       if (!data.success) {
-        setError(data.error?.message || "Помилка збереження");
+        setError(data.error?.message || "Не вдалося зберегти");
         return;
       }
 

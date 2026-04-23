@@ -164,16 +164,18 @@ model IntegrationLog {
 }
 
 model Page {
-  id        String   @id @default(cuid())
-  title     String
-  slug      String   @unique
-  content   String   @db.Text
-  isActive  Boolean  @default(true)
-  metaTitle String?
-  metaDesc  String?
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  title         String
+  slug          String   @unique
+  content       String   @db.Text
+  isActive      Boolean  @default(true)
+  showInNav     Boolean  @default(true)
+  displayOnHome Boolean  @default(false)
+  metaTitle     String?
+  metaDesc      String?
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Banner {

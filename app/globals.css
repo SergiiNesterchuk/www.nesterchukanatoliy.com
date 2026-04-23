@@ -34,3 +34,27 @@ body {
 .prose p {
   margin-bottom: 0.75em;
 }
+
+/* Vinegar content block grid — responsive */
+.vinegar-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+}
+
+@media (max-width: 900px) {
+  .vinegar-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .vinegar-grid {
+    grid-template-columns: 1fr;
+  }
+  .vinegar-btn {
+    width: 100%;
+    box-sizing: border-box;
+  }
+}

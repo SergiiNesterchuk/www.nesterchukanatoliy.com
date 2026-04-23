@@ -12,7 +12,7 @@ export async function Header() {
   try {
     [categories, pages] = await Promise.all([
       CategoryService.getAll(),
-      PageRepository.findAll(),
+      PageRepository.findForNav(),
     ]);
   } catch {
     // DB may be unavailable during build

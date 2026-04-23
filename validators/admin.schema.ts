@@ -35,6 +35,8 @@ export const pageSchema = z.object({
   slug: z.string().min(1).max(200).regex(/^[a-z0-9-]+$/, "Slug: тільки a-z, 0-9, -"),
   content: z.string().min(1, "Контент обов'язковий").max(100000),
   isActive: z.coerce.boolean().default(true),
+  showInNav: z.coerce.boolean().default(true),
+  displayOnHome: z.coerce.boolean().default(false),
   sortOrder: z.coerce.number().int().default(0),
   metaTitle: z.string().max(200).optional().default(""),
   metaDesc: z.string().max(500).optional().default(""),

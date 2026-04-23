@@ -4,26 +4,33 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 
-interface Setting {
-  key: string;
-  value: string;
-}
+interface Setting { key: string; value: string; }
 
-const HOMEPAGE_KEYS = [
-  { key: "homepage_title", label: "Заголовок Hero", default: "Натуральні продукти" },
-  { key: "homepage_title_accent", label: "Акцентний текст", default: "власного виробництва" },
-  { key: "homepage_description", label: "Опис Hero", default: "Яблучний оцет без хімії та штучних добавок. Бордоська суміш для захисту саду." },
-  { key: "homepage_cta_text", label: "Текст кнопки CTA", default: "Перейти до каталогу" },
-  { key: "homepage_cta_link", label: "Посилання CTA", default: "/katalog/" },
-  { key: "homepage_products_title", label: "Заголовок секції товарів", default: "Наші товари" },
-  { key: "homepage_categories_title", label: "Заголовок секції категорій", default: "Категорії" },
-  { key: "_divider_1", label: "--- Сторінка успішної оплати ---", default: "" },
-  { key: "checkout_success_title", label: "Заголовок (успішна оплата)", default: "Замовлення прийнято!" },
-  { key: "checkout_success_text", label: "Текст (успішна оплата)", default: "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження." },
-  { key: "checkout_failed_title", label: "Заголовок (помилка оплати)", default: "Оплата не пройшла" },
-  { key: "checkout_failed_text", label: "Текст (помилка оплати)", default: "Оплата не була завершена. Ваше замовлення збережено — ви можете спробувати оплатити ще раз або зв'язатися з нами." },
-  { key: "checkout_pending_title", label: "Заголовок (очікування)", default: "Очікуємо підтвердження оплати" },
-  { key: "checkout_pending_text", label: "Текст (очікування)", default: "Ваше замовлення прийнято. Оплата ще обробляється — ми повідомимо вас коли вона буде підтверджена." },
+const SECTIONS = [
+  { title: "Hero секція", items: [
+    { key: "homepage_title", label: "Заголовок", type: "text", default: "Натуральні продукти" },
+    { key: "homepage_title_accent", label: "Акцентний текст", type: "text", default: "власного виробництва" },
+    { key: "homepage_description", label: "Опис", type: "textarea", default: "Яблучний оцет без хімії та штучних добавок." },
+    { key: "homepage_cta_text", label: "Текст кнопки", type: "text", default: "Перейти до каталогу" },
+    { key: "homepage_cta_link", label: "Посилання кнопки", type: "text", default: "/katalog/" },
+  ]},
+  { title: "Секції на головній", items: [
+    { key: "homepage_show_categories", label: "Показувати категорії", type: "select", default: "true", options: ["true", "false"] },
+    { key: "homepage_categories_title", label: "Заголовок категорій", type: "text", default: "Категорії" },
+    { key: "homepage_show_products", label: "Показувати товари", type: "select", default: "true", options: ["true", "false"] },
+    { key: "homepage_products_title", label: "Заголовок товарів", type: "text", default: "Наші товари" },
+    { key: "homepage_show_pages", label: "Показувати сторінки (displayOnHome)", type: "select", default: "false", options: ["true", "false"] },
+  ]},
+  { title: "HTML-блок на головній", items: [
+    { key: "homepage_content_block_position", label: "Позиція блоку", type: "select", default: "after_hero", options: ["after_hero", "after_categories", "after_products"] },
+    { key: "homepage_content_block", label: "HTML контент", type: "html", default: "" },
+  ]},
+  { title: "Сторінка оплати", items: [
+    { key: "checkout_success_title", label: "Заголовок (успіх)", type: "text", default: "Замовлення прийнято!" },
+    { key: "checkout_success_text", label: "Текст (успіх)", type: "textarea", default: "Дякуємо за замовлення!" },
+    { key: "checkout_failed_title", label: "Заголовок (помилка)", type: "text", default: "Оплата не пройшла" },
+    { key: "checkout_failed_text", label: "Текст (помилка)", type: "textarea", default: "Оплата не була завершена." },
+  ]},
 ];
 
 export default function AdminBannersPage() {
@@ -45,20 +52,25 @@ export default function AdminBannersPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const update = (key: string, value: string) => setSettings((p) => ({ ...p, [key]: value }));
+
   const handleSave = async () => {
     setSaving(true);
     setMessage("");
     try {
-      for (const item of HOMEPAGE_KEYS) {
-        if (item.key.startsWith("_")) continue;
-        const value = settings[item.key] ?? item.default;
-        await fetch("/api/admin/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: item.key, value }),
-        });
+      for (const section of SECTIONS) {
+        for (const item of section.items) {
+          const value = settings[item.key] ?? item.default;
+          await fetch("/api/admin/settings", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key: item.key, value }),
+          });
+        }
       }
       setMessage("Збережено");
+    } catch {
+      setMessage("Помилка збереження");
     } finally {
       setSaving(false);
     }
@@ -68,48 +80,56 @@ export default function AdminBannersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Головна сторінка</h1>
-
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">Головна сторінка та контент</h1>
       {message && (
-        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">{message}</div>
+        <div className={`mb-4 rounded-lg p-3 text-sm border ${message === "Збережено" ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>
+          {message}
+        </div>
       )}
-
-      <div className="bg-white rounded-xl border p-6 space-y-4">
-        {HOMEPAGE_KEYS.map((item) => {
-          if (item.key.startsWith("_divider")) {
-            return <div key={item.key} className="border-t pt-4 mt-4"><h3 className="text-sm font-semibold text-gray-500 uppercase">{item.label.replace(/^-+ | -+$/g, "").trim()}</h3></div>;
-          }
-
-          const isTextarea = item.key.includes("description") || item.key.includes("text");
-          return (
-          <div key={item.key}>
-            {isTextarea ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
-                <textarea
-                  value={settings[item.key] ?? item.default}
-                  onChange={(e) => setSettings({ ...settings, [item.key]: e.target.value })}
-                  rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-                />
-              </div>
-            ) : (
-              <Input
-                id={item.key}
-                label={item.label}
-                value={settings[item.key] ?? item.default}
-                onChange={(e) => setSettings({ ...settings, [item.key]: e.target.value })}
-              />
-            )}
+      <div className="space-y-6">
+        {SECTIONS.map((section) => (
+          <div key={section.title} className="bg-white rounded-xl border p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{section.title}</h2>
+            <div className="space-y-4">
+              {section.items.map((item) => {
+                const value = settings[item.key] ?? item.default;
+                if (item.type === "select" && "options" in item) {
+                  return (
+                    <div key={item.key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
+                      <select value={value} onChange={(e) => update(item.key, e.target.value)} className="w-full md:w-64 rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                        {(item.options as string[]).map((o) => (
+                          <option key={o} value={o}>
+                            {o === "true" ? "Так" : o === "false" ? "Ні" : o === "after_hero" ? "Після hero" : o === "after_categories" ? "Після категорій" : o === "after_products" ? "Після товарів" : o}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                }
+                if (item.type === "textarea") {
+                  return (
+                    <div key={item.key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
+                      <textarea value={value} onChange={(e) => update(item.key, e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+                    </div>
+                  );
+                }
+                if (item.type === "html") {
+                  return (
+                    <div key={item.key}>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
+                      <textarea value={value} onChange={(e) => update(item.key, e.target.value)} rows={20} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm font-mono" placeholder="HTML-код..." />
+                      <p className="mt-1 text-xs text-gray-400">Дозволено: section, div, h1-h6, p, ul, ol, li, a, img, strong, em, style. Заборонено: script, iframe.</p>
+                    </div>
+                  );
+                }
+                return <Input key={item.key} id={item.key} label={item.label} value={value} onChange={(e) => update(item.key, e.target.value)} />;
+              })}
+            </div>
           </div>
-        );
-        })}
-
-        <Button onClick={handleSave} loading={saving}>Зберегти</Button>
-      </div>
-
-      <div className="mt-4 text-sm text-gray-500">
-        Зміни з&apos;являться на головній сторінці після перезавантаження.
+        ))}
+        <Button onClick={handleSave} loading={saving} size="lg">Зберегти все</Button>
       </div>
     </div>
   );

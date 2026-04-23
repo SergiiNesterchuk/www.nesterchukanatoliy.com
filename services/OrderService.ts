@@ -182,14 +182,20 @@ export class OrderService {
     } else if (result.status === "failure") {
       await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: "failed" });
 
-      // Sync failed/cancelled orders to KeyCRM too (so manager sees them)
+      // Sync to KeyCRM: reversal if already synced, create if not
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
-          service.createOrder(order.id).catch((e) => {
-            logger.error("Async CRM sync failed (cancelled)", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
-          });
+          if (order.keycrmOrderId) {
+            service.syncPaymentReversal(order.id).catch((e) => {
+              logger.error("Reversal sync failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+            });
+          } else {
+            service.createOrder(order.id).catch((e) => {
+              logger.error("CRM sync failed (unpaid)", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+            });
+          }
         });
       }
     }

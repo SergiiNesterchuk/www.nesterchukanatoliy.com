@@ -34,9 +34,19 @@ export default async function AdminPageEditPage({
           <Input id="title" name="title" label="Заголовок *" defaultValue={page?.title ?? ""} required />
           <Input id="slug" name="slug" label="Slug *" defaultValue={page?.slug ?? ""} required />
           <Input id="sortOrder" name="sortOrder" label="Порядок" type="number" defaultValue={page?.sortOrder ?? 0} />
-          <div className="flex items-center gap-2 pt-6">
-            <input type="checkbox" id="isActive" name="isActive" defaultChecked={page?.isActive ?? true} className="rounded" />
-            <label htmlFor="isActive" className="text-sm">Активна</label>
+          <div className="flex flex-col gap-2 pt-6">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="isActive" name="isActive" defaultChecked={page?.isActive ?? true} className="rounded" />
+              <span className="text-sm">Активна</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="showInNav" name="showInNav" defaultChecked={page?.showInNav ?? true} className="rounded" />
+              <span className="text-sm">Показувати в навігації</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="displayOnHome" name="displayOnHome" defaultChecked={page?.displayOnHome ?? false} className="rounded" />
+              <span className="text-sm">Показувати на головній</span>
+            </label>
           </div>
         </div>
         <div>

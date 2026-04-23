@@ -6,7 +6,7 @@ import { PageRepository } from "@/repositories/PageRepository";
 export async function Footer() {
   let pages: { title: string; slug: string }[] = [];
   try {
-    pages = await PageRepository.findAll();
+    pages = await PageRepository.findForNav();
   } catch { /* DB unavailable */ }
 
   return (

@@ -143,8 +143,65 @@ export class KeyCRMService {
     }
   }
 
+  /**
+   * Sync payment reversal (declined/refunded/cancelled) to KeyCRM.
+   * Does NOT create a new order — only updates existing KeyCRM order.
+   */
+  async syncPaymentReversal(orderId: string): Promise<void> {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) return;
+
+    // Can only update if order already exists in KeyCRM
+    if (!order.keycrmOrderId) {
+      logger.info("No KeyCRM order to update reversal for", { orderId });
+      return;
+    }
+
+    try {
+      // Add comment about payment reversal
+      await this.client.request(
+        "PUT",
+        `/order/${order.keycrmOrderId}`,
+        {
+          manager_comment: `Оплата скасована/відхилена. Статус: ${order.paymentStatus}. ${order.externalPaymentId ? `WayForPay ID: ${order.externalPaymentId}` : ""}`,
+        },
+        "order",
+        orderId
+      );
+
+      await OrderRepository.updateKeycrmSync(orderId, {
+        keycrmSyncStatus: "synced",
+        keycrmSyncError: null,
+      });
+
+      logger.info("Payment reversal synced to KeyCRM", {
+        orderId,
+        keycrmOrderId: order.keycrmOrderId,
+        paymentStatus: order.paymentStatus,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await OrderRepository.updateKeycrmSync(orderId, {
+        keycrmSyncStatus: "failed",
+        keycrmSyncError: `Reversal sync: ${message.substring(0, 400)}`,
+        keycrmSyncRetries: { increment: 1 },
+      });
+      logger.error("Payment reversal sync failed", { orderId, error: message.substring(0, 300) });
+    }
+  }
+
   async retrySync(orderId: string): Promise<{ success: boolean; error?: string }> {
     try {
+      const order = await OrderRepository.findById(orderId);
+      if (!order) return { success: false, error: "Order not found" };
+
+      // If payment failed and order exists in KeyCRM — sync reversal, not create
+      if (order.paymentStatus === "failed" && order.keycrmOrderId) {
+        await this.syncPaymentReversal(orderId);
+        return { success: true };
+      }
+
+      // Otherwise create/sync order
       await this.createOrder(orderId);
       return { success: true };
     } catch (error) {

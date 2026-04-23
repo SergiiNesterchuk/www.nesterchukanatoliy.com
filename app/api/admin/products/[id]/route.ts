@@ -62,6 +62,7 @@ export const PUT = adminGuard(async (
     });
     return successResponse(product);
   } catch (error) {
+    console.error("[Admin] Product update failed:", error instanceof Error ? error.message : error);
     return errorResponse(error);
   }
 });
