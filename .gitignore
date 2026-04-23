@@ -1,7 +1,5 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -10,34 +8,49 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
-
-# next.js
+# build output
 /.next/
 /out/
+/build/
+/dist/
+/.turbo/
+/.cache/
 
-# production
-/build
+# testing
+/coverage/
 
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
+# env
 .env
 .env.local
 .env.*.local
 
-# vercel
-.vercel
-
-# typescript
+# misc
+.DS_Store
+*.pem
 *.tsbuildinfo
 next-env.d.ts
+
+# debug / logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# local database files
+*.db
+*.sqlite
+*.sqlite3
+prisma/dev.db
+prisma/dev.db-journal
+
+# platform
+.vercel
+.railway
+
+# temp / backups
+tmp/
+temp/
+*.bak
+*.swp
+*~

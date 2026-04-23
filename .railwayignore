@@ -1,0 +1,26 @@
+# Same as .dockerignore — limits upload context to Railway
+.git
+node_modules
+.next
+out
+build
+dist
+.turbo
+.cache
+coverage
+*.log
+*.db
+*.sqlite
+*.sqlite3
+.DS_Store
+.vscode
+.idea
+.claude
+tmp
+temp
+REVERSE_ANALYSIS_REPORT.md
+README.md
+CLAUDE.md
+AGENTS.md
+docs
+screenshots
