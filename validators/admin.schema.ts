@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const productCreateSchema = z.object({
   name: z.string().min(1, "Назва обов'язкова").max(300),
-  slug: z.string().min(1).max(200).regex(/^[a-z0-9-]+$/, "Slug: тільки a-z, 0-9, -"),
+  slug: z.string().min(1).max(200).regex(/^[a-z0-9._-]+$/, "Slug: тільки a-z, 0-9, крапка, дефіс"),
   sku: z.string().min(1, "SKU обов'язковий").max(50),
   shortDescription: z.string().max(1000).optional().default(""),
   description: z.string().max(50000).optional().default(""),
@@ -21,7 +21,7 @@ export const productUpdateSchema = productCreateSchema.partial();
 
 export const categorySchema = z.object({
   name: z.string().min(1, "Назва обов'язкова").max(200),
-  slug: z.string().min(1).max(200).regex(/^[a-z0-9-]+$/, "Slug: тільки a-z, 0-9, -"),
+  slug: z.string().min(1).max(200).regex(/^[a-z0-9._-]+$/, "Slug: тільки a-z, 0-9, крапка, дефіс"),
   description: z.string().max(2000).optional().default(""),
   imageUrl: z.string().max(500).optional().default(""),
   isActive: z.coerce.boolean().default(true),
@@ -32,7 +32,7 @@ export const categorySchema = z.object({
 
 export const pageSchema = z.object({
   title: z.string().min(1, "Заголовок обов'язковий").max(300),
-  slug: z.string().min(1).max(200).regex(/^[a-z0-9-]+$/, "Slug: тільки a-z, 0-9, -"),
+  slug: z.string().min(1).max(200).regex(/^[a-z0-9._-]+$/, "Slug: тільки a-z, 0-9, крапка, дефіс"),
   content: z.string().min(1, "Контент обов'язковий").max(100000),
   isActive: z.coerce.boolean().default(true),
   showInNav: z.coerce.boolean().default(true),
