@@ -39,7 +39,7 @@ const POPULAR_CITIES = [
   { name: "Бровари", query: "Бровари" },
 ];
 
-export function CheckoutForm() {
+export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }) {
   const { items, totalPrice, clearCart } = useCartStore();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -128,27 +128,31 @@ export function CheckoutForm() {
 
   const selectCity = (s: Settlement) => {
     setSelectedCity(s);
-    setCityQuery(s.Present || s.Description);
+    // Show only city name in input (not full "м. Київ, Київська обл.")
+    setCityQuery(s.MainDescription || s.Description);
     setShowCityDropdown(false);
     setSelectedWarehouse(null);
     setWarehouseQuery("");
     setWarehouses([]);
+    setNpError("");
     setErrors((p) => ({ ...p, city: "" }));
   };
 
   const selectPopularCity = async (query: string) => {
-    setCityQuery(query);
     setCityLoading(true);
     setNpError("");
     try {
       const res = await fetch(`/api/novaposhta/settlements?query=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (data.success && data.data?.length > 0) {
+        // selectCity sets selectedCity which prevents debounce from firing again
         selectCity(data.data[0]);
       } else if (data.error?.message) {
+        setCityQuery(query);
         setNpError(data.error.message);
       }
     } catch {
+      setCityQuery(query);
       setNpError("Не вдалося знайти місто");
     } finally {
       setCityLoading(false);
@@ -177,7 +181,7 @@ export function CheckoutForm() {
     if (!selectedCity) e.city = "Оберіть місто";
     if (deliveryMethod === "nova_poshta_branch" && !selectedWarehouse) e.warehouse = "Оберіть відділення";
     if (deliveryMethod === "nova_poshta_courier" && !courierAddress.trim()) e.courierAddress = "Вкажіть адресу";
-    if (!agreedToTerms) e.agreedToTerms = "Потрібна згода з умовами";
+    if (requireTerms && !agreedToTerms) e.agreedToTerms = "Потрібна згода з умовами";
     if (items.length === 0) e.items = "Кошик порожній";
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -360,13 +364,15 @@ export function CheckoutForm() {
         <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Додаткові побажання..." />
       </section>
 
-      <div>
-        <label className="flex items-start gap-2 cursor-pointer">
-          <input type="checkbox" checked={agreedToTerms} onChange={(e) => { setAgreedToTerms(e.target.checked); setErrors((p) => ({ ...p, agreedToTerms: "" })); }} className="mt-0.5 text-green-600 rounded" />
-          <span className="text-sm text-gray-600">Я погоджуюсь з <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">умовами використання</a></span>
-        </label>
-        {errors.agreedToTerms && <p className="mt-1 text-xs text-red-600">{errors.agreedToTerms}</p>}
-      </div>
+      {requireTerms && (
+        <div>
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" checked={agreedToTerms} onChange={(e) => { setAgreedToTerms(e.target.checked); setErrors((p) => ({ ...p, agreedToTerms: "" })); }} className="mt-0.5 text-green-600 rounded" />
+            <span className="text-sm text-gray-600">Я погоджуюсь з <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">умовами використання</a></span>
+          </label>
+          {errors.agreedToTerms && <p className="mt-1 text-xs text-red-600">{errors.agreedToTerms}</p>}
+        </div>
+      )}
 
       <Button type="submit" size="lg" loading={submitting} disabled={submitting} className="w-full">
         {submitting ? "Оформлення..." : `Оплатити ${formatPrice(totalPrice())}`}

@@ -26,7 +26,7 @@ export const checkoutSchema = z.object({
   utmTerm: z.string().max(200).optional(),
   utmContent: z.string().max(200).optional(),
   idempotencyKey: z.string().min(1).max(100),
-  agreedToTerms: z.literal(true, { error: "Потрібна згода з умовами" }),
+  agreedToTerms: z.boolean().optional().default(true),
 });
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>;

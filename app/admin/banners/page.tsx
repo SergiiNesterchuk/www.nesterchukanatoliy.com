@@ -25,6 +25,9 @@ const SECTIONS = [
     { key: "homepage_content_block_position", label: "Позиція блоку", type: "select", default: "after_hero", options: ["after_hero", "after_categories", "after_products"] },
     { key: "homepage_content_block", label: "HTML контент", type: "html", default: "" },
   ]},
+  { title: "Checkout налаштування", items: [
+    { key: "checkout_require_terms", label: "Вимагати згоду з умовами", type: "select", default: "true", options: ["true", "false"] },
+  ]},
   { title: "Сторінка оплати", items: [
     { key: "checkout_success_title", label: "Заголовок (успіх)", type: "text", default: "Замовлення прийнято!" },
     { key: "checkout_success_text", label: "Текст (успіх)", type: "textarea", default: "Дякуємо за замовлення!" },
