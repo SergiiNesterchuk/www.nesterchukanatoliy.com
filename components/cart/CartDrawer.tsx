@@ -12,6 +12,32 @@ import { formatPrice } from "@/shared/money";
 export function CartDrawer() {
   const { items, isOpen, closeCart, updateQuantity, removeItem, totalPrice } = useCartStore();
 
+  const safeUpdateQuantity = (productId: string, qty: number) => {
+    if (qty <= 0) {
+      const isLast = items.length === 1;
+      if (isLast) {
+        if (confirm("Видалити останній товар з корзини?")) {
+          removeItem(productId);
+        }
+        return;
+      }
+      removeItem(productId);
+      return;
+    }
+    updateQuantity(productId, qty);
+  };
+
+  const safeRemove = (productId: string) => {
+    const isLast = items.length === 1;
+    if (isLast) {
+      if (confirm("Видалити останній товар з корзини?")) {
+        removeItem(productId);
+      }
+      return;
+    }
+    removeItem(productId);
+  };
+
   return (
     <Drawer open={isOpen} onClose={closeCart} title="Кошик">
       {items.length === 0 ? (
@@ -19,6 +45,11 @@ export function CartDrawer() {
           icon={<ShoppingBag className="h-12 w-12" />}
           title="Кошик порожній"
           description="Додайте товари з каталогу"
+          action={
+            <Link href="/katalog/" onClick={closeCart} className="text-green-600 hover:underline text-sm">
+              Перейти до каталогу
+            </Link>
+          }
         />
       ) : (
         <>
@@ -27,13 +58,16 @@ export function CartDrawer() {
               <CartItem
                 key={item.productId}
                 item={item}
-                onUpdateQuantity={updateQuantity}
-                onRemove={removeItem}
+                onUpdateQuantity={safeUpdateQuantity}
+                onRemove={safeRemove}
               />
             ))}
           </div>
 
           <div className="sticky bottom-0 bg-white border-t px-4 py-4 space-y-3">
+            <Link href="/katalog/" onClick={closeCart} className="block text-center text-sm text-green-600 hover:underline">
+              + Додати ще товари
+            </Link>
             <div className="flex items-center justify-between text-base font-semibold">
               <span>Разом:</span>
               <span>{formatPrice(totalPrice())}</span>

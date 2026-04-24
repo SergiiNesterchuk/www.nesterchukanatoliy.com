@@ -289,24 +289,58 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
 
       {/* Order summary — editable quantities */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Ваше замовлення</h2>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-          {items.map((item) => (
-            <div key={item.productId} className="flex items-center justify-between gap-2 text-sm">
-              <span className="flex-1 min-w-0 truncate">{item.name}</span>
-              <div className="flex items-center gap-1 flex-shrink-0">
-                <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                  className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">−</button>
-                <span className="w-8 text-center font-medium tabular-nums">{item.quantity}</span>
-                <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                  className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold">Ваше замовлення</h2>
+          <a href="/katalog/" className="text-sm text-green-600 hover:underline">+ Додати ще товари</a>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+          {items.map((item) => {
+            const isLastItem = items.length === 1 && item.quantity === 1;
+
+            const handleMinus = () => {
+              if (isLastItem) {
+                if (confirm("Видалити останній товар з корзини?")) {
+                  removeItem(item.productId);
+                }
+              } else {
+                updateQuantity(item.productId, item.quantity - 1);
+              }
+            };
+
+            const handleRemove = () => {
+              if (isLastItem) {
+                if (confirm("Видалити останній товар з корзини?")) {
+                  removeItem(item.productId);
+                }
+              } else {
+                removeItem(item.productId);
+              }
+            };
+
+            return (
+              <div key={item.productId} className="text-sm">
+                {/* Row 1: name + price + remove */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <span className="flex-1 text-gray-900 leading-snug line-clamp-2">{item.name}</span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
+                    <button type="button" onClick={handleRemove}
+                      className="text-gray-400 hover:text-red-500 text-lg leading-none" title="Видалити">×</button>
+                  </div>
+                </div>
+                {/* Row 2: quantity controls */}
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={handleMinus}
+                    className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">−</button>
+                  <span className="w-8 text-center font-medium tabular-nums">{item.quantity}</span>
+                  <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                    className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
+                  <span className="text-xs text-gray-400 ml-2">× {formatPrice(item.price)}</span>
+                </div>
               </div>
-              <span className="font-medium w-20 text-right">{formatPrice(item.price * item.quantity)}</span>
-              <button type="button" onClick={() => removeItem(item.productId)}
-                className="text-gray-400 hover:text-red-500 ml-1" title="Видалити">×</button>
-            </div>
-          ))}
-          <div className="border-t pt-2 flex justify-between font-semibold">
+            );
+          })}
+          <div className="border-t pt-3 flex justify-between font-semibold">
             <span>Разом</span><span>{formatPrice(totalPrice())}</span>
           </div>
         </div>
