@@ -9,7 +9,7 @@ export async function Footer() {
   let pages: { title: string; slug: string }[] = [];
   let socialLinks: Record<string, string> = {};
   try {
-    pages = await PageRepository.findForNav();
+    pages = await PageRepository.findForFooter();
     const socialSettings = await prisma.settings.findMany({
       where: { key: { startsWith: "social_" } },
     });

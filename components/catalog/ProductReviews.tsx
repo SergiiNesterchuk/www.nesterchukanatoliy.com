@@ -10,6 +10,7 @@ interface Review {
   customerName: string;
   rating: number;
   text: string;
+  displayDate: string | null;
   createdAt: string;
 }
 
@@ -106,7 +107,7 @@ export function ProductReviews({ productId }: { productId: string }) {
                     <Star key={s} className={`h-3.5 w-3.5 ${s <= r.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-200"}`} />
                   ))}
                 </div>
-                <span className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleDateString("uk-UA")}</span>
+                <span className="text-xs text-gray-400">{new Date(r.displayDate || r.createdAt).toLocaleDateString("uk-UA")}</span>
               </div>
               <p className="text-sm text-gray-600">{r.text}</p>
             </div>

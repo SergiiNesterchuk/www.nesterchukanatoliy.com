@@ -7,10 +7,19 @@ export class PageRepository {
     });
   }
 
-  /** Pages visible in navigation (header/footer) */
+  /** Pages visible in header navigation */
   static async findForNav() {
     return prisma.page.findMany({
       where: { isActive: true, showInNav: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, title: true, slug: true },
+    });
+  }
+
+  /** Pages visible in footer */
+  static async findForFooter() {
+    return prisma.page.findMany({
+      where: { isActive: true, showInFooter: true },
       orderBy: { sortOrder: "asc" },
       select: { id: true, title: true, slug: true },
     });

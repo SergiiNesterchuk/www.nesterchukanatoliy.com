@@ -31,6 +31,7 @@ export const POST = adminGuard(async (req: NextRequest) => {
         text: body.text,
         status: "approved",
         source: "admin",
+        displayDate: body.displayDate ? new Date(body.displayDate) : new Date(),
         approvedAt: new Date(),
       },
     });

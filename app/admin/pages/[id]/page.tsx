@@ -41,7 +41,11 @@ export default async function AdminPageEditPage({
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" id="showInNav" name="showInNav" defaultChecked={page?.showInNav ?? true} className="rounded" />
-              <span className="text-sm">Показувати в навігації</span>
+              <span className="text-sm">Показувати в меню (header)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="showInFooter" name="showInFooter" defaultChecked={page?.showInFooter ?? true} className="rounded" />
+              <span className="text-sm">Показувати у футері</span>
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" id="displayOnHome" name="displayOnHome" defaultChecked={page?.displayOnHome ?? false} className="rounded" />

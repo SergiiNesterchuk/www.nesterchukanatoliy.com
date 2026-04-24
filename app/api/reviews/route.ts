@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
 
   const reviews = await prisma.productReview.findMany({
     where: { productId, status: "approved" },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ displayDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
     select: {
-      id: true, customerName: true, rating: true, text: true, createdAt: true,
+      id: true, customerName: true, rating: true, text: true, displayDate: true, createdAt: true,
     },
   });
 

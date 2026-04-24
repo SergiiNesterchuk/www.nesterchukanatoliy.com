@@ -178,6 +178,8 @@ model IntegrationLog {
   errorMessage  String?
   retryCount    Int      @default(0)
   durationMs    Int?
+  isResolved    Boolean  @default(false)
+  resolvedAt    DateTime?
   createdAt     DateTime @default(now())
 
   @@index([integration, createdAt])
@@ -191,6 +193,7 @@ model Page {
   content       String   @db.Text
   isActive      Boolean  @default(true)
   showInNav     Boolean  @default(true)
+  showInFooter  Boolean  @default(true)
   displayOnHome Boolean  @default(false)
   metaTitle     String?
   metaDesc      String?
@@ -315,6 +318,7 @@ model ProductReview {
   text         String    @db.Text
   status       String    @default("pending") // pending, approved, rejected
   source       String    @default("customer") // customer, admin
+  displayDate  DateTime?  // admin-controlled display date; fallback to createdAt
   approvedAt   DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt

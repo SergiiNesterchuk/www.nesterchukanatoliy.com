@@ -15,8 +15,8 @@ export default async function AdminIntegrationLogsPage() {
       prisma.order.count({ where: { keycrmSyncStatus: "pending", paymentStatus: "paid" } }),
       prisma.order.count({ where: { keycrmSyncStatus: "failed" } }),
       prisma.order.count({ where: { paymentStatus: "paid", keycrmSyncStatus: { in: ["pending", "failed"] } } }),
-      prisma.integrationLog.count({ where: { responseStatus: { gte: 400 }, createdAt: { gte: dayAgo } } }),
-      prisma.integrationLog.findMany({ orderBy: { createdAt: "desc" }, take: 50 }),
+      prisma.integrationLog.count({ where: { responseStatus: { gte: 400 }, isResolved: false, createdAt: { gte: dayAgo } } }),
+      prisma.integrationLog.findMany({ where: { isResolved: false }, orderBy: { createdAt: "desc" }, take: 50 }),
     ]);
 
     stats = { pendingSync, failedSync, paidNotSynced, recentErrors };

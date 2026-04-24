@@ -5,14 +5,17 @@ import { NotFoundError } from "@/shared/errors";
 export class CategoryService {
   static async getAll(): Promise<CategoryListItem[]> {
     const categories = await CategoryRepository.findAll();
-    return categories.map((cat) => ({
-      id: cat.id,
-      name: cat.name,
-      slug: cat.slug,
-      description: cat.description,
-      imageUrl: cat.imageUrl,
-      productCount: cat._count.products,
-    }));
+    // Filter: only active categories with at least 1 product
+    return categories
+      .map((cat) => ({
+        id: cat.id,
+        name: cat.name,
+        slug: cat.slug,
+        description: cat.description,
+        imageUrl: cat.imageUrl,
+        productCount: cat._count.products,
+      }))
+      .filter((cat) => cat.productCount > 0);
   }
 
   static async getBySlug(slug: string): Promise<CategoryDetail> {

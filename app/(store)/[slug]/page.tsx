@@ -127,7 +127,20 @@ export default async function SlugPage({
   const { slug } = await params;
   const entity = await resolveSlug(slug);
 
-  if (!entity) notFound();
+  if (!entity) {
+    // Check redirects before 404
+    try {
+      const { prisma } = await import("@/shared/db");
+      const redirect = await prisma.redirect.findFirst({
+        where: { fromPath: `/${slug}`, isActive: true },
+      });
+      if (redirect) {
+        const { redirect: nextRedirect } = await import("next/navigation");
+        nextRedirect(redirect.toPath);
+      }
+    } catch { /* */ }
+    notFound();
+  }
 
   if (entity.type === "category") {
     return <CategoryView slug={slug} searchParams={await searchParams} />;

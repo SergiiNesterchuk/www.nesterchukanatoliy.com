@@ -19,6 +19,7 @@ export const PUT = adminGuard(async (
     if (body.customerName !== undefined) updateData.customerName = body.customerName;
     if (body.text !== undefined) updateData.text = body.text;
     if (body.rating !== undefined) updateData.rating = body.rating;
+    if (body.displayDate !== undefined) updateData.displayDate = body.displayDate ? new Date(body.displayDate) : null;
 
     const review = await prisma.productReview.update({ where: { id }, data: updateData });
     return successResponse(review);
