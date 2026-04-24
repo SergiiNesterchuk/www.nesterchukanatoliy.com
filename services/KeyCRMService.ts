@@ -13,7 +13,7 @@ export class KeyCRMService {
 
   constructor() {
     this.client = new KeyCRMClient();
-    this.sourceId = parseInt(process.env.KEYCRM_SOURCE_ID || "1", 10);
+    this.sourceId = parseInt(process.env.KEYCRM_SOURCE_ID || "6", 10);
   }
 
   async findOrCreateBuyer(phone: string, name: string, email?: string): Promise<KeyCRMBuyerResponse | null> {

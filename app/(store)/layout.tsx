@@ -2,6 +2,9 @@ import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CartDrawer } from "@/components/cart/CartDrawer";
 
+// Force dynamic — Header/Footer read categories/pages/settings from DB
+export const dynamic = "force-dynamic";
+
 export default function StoreLayout({
   children,
 }: {

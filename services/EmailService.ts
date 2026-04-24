@@ -60,10 +60,11 @@ export class EmailService {
     }
 
     // Use token-based URL if available (one-click access), fallback to form
-    const baseStatusUrl = `${siteUrl.replace(/\/+$/, "")}/order-status`;
+    const base = siteUrl.replace(/\/+$/, "");
+    // Link directly to order detail page with token
     const statusUrl = order.accessToken
-      ? `${baseStatusUrl}?token=${order.accessToken}`
-      : baseStatusUrl;
+      ? `${base}/order-status/${order.publicOrderNumber}?token=${order.accessToken}`
+      : `${base}/order-status`;
     const totalFormatted = formatPrice(order.total);
 
     const itemsHtml = order.items
