@@ -32,12 +32,8 @@ async function getFooterConfig(): Promise<{ config: FooterConfig; socialLinks: R
     address: "м. Бровари, Київська обл.",
   };
 
-  const socialLinks: Record<string, string> = {
-    instagram: "https://www.instagram.com/nesterchuk_anatoliy",
-    youtube: "https://youtube.com/@nesterchuk_anatoliy",
-    facebook: "https://www.facebook.com/profile.php?id=100025198117909",
-    tiktok: "https://www.tiktok.com/@nesterchuk_anatoliy",
-  };
+  // Social links: empty by default, populated only from DB
+  const socialLinks: Record<string, string> = {};
 
   try {
     const settings = await prisma.settings.findMany({
@@ -50,19 +46,20 @@ async function getFooterConfig(): Promise<{ config: FooterConfig; socialLinks: R
     });
 
     for (const s of settings) {
-      if (!s.value) continue;
+      // Use value even if empty — empty means "don't show"
+      const v = s.value ?? "";
       switch (s.key) {
-        case "footer_brand_title": defaults.brandTitle = s.value; break;
-        case "footer_brand_description": defaults.brandDescription = s.value; break;
-        case "footer_show_social": defaults.showSocial = s.value !== "false"; break;
-        case "footer_show_contacts": defaults.showContacts = s.value !== "false"; break;
-        case "footer_show_customer_links": defaults.showCustomerLinks = s.value !== "false"; break;
-        case "footer_copyright_text": defaults.copyrightText = s.value; break;
-        case "footer_phone": defaults.phone = s.value; defaults.phoneDisplay = s.value; break;
-        case "footer_email": defaults.email = s.value; break;
-        case "footer_address": defaults.address = s.value; break;
-        case "social_instagram": socialLinks.instagram = s.value; break;
-        case "social_youtube": socialLinks.youtube = s.value; break;
+        case "footer_brand_title": defaults.brandTitle = v; break;
+        case "footer_brand_description": defaults.brandDescription = v; break;
+        case "footer_show_social": defaults.showSocial = v !== "false"; break;
+        case "footer_show_contacts": defaults.showContacts = v !== "false"; break;
+        case "footer_show_customer_links": defaults.showCustomerLinks = v !== "false"; break;
+        case "footer_copyright_text": defaults.copyrightText = v; break;
+        case "footer_phone": if (v) { defaults.phone = v; defaults.phoneDisplay = v; } else { defaults.phone = ""; defaults.phoneDisplay = ""; } break;
+        case "footer_email": defaults.email = v; break;
+        case "footer_address": defaults.address = v; break;
+        case "social_instagram": if (v) socialLinks.instagram = v; break;
+        case "social_youtube": if (v) socialLinks.youtube = v; break;
         case "social_facebook": socialLinks.facebook = s.value; break;
         case "social_tiktok": socialLinks.tiktok = s.value; break;
       }
@@ -106,19 +103,19 @@ export async function Footer() {
             </div>
           )}
 
-          {/* Contacts */}
-          {fc.showContacts && (
+          {/* Contacts — only render fields that have values */}
+          {fc.showContacts && (fc.phone || fc.email || fc.address) && (
             <div>
               <h3 className="text-white font-semibold mb-3">Контакти</h3>
               <div className="space-y-2 text-sm">
-                <a href={`tel:${fc.phone}`} className="flex items-center gap-2 hover:text-white transition-colors">
+                {fc.phone && <a href={`tel:${fc.phone}`} className="flex items-center gap-2 hover:text-white transition-colors">
                   <Phone className="h-4 w-4 flex-shrink-0" />
                   {fc.phoneDisplay}
-                </a>
-                <a href={`mailto:${fc.email}`} className="flex items-center gap-2 hover:text-white transition-colors">
+                </a>}
+                {fc.email && <a href={`mailto:${fc.email}`} className="flex items-center gap-2 hover:text-white transition-colors">
                   <Mail className="h-4 w-4 flex-shrink-0" />
                   {fc.email}
-                </a>
+                </a>}
                 {fc.address && (
                   <div className="flex items-start gap-2">
                     <MapPin className="h-4 w-4 flex-shrink-0 mt-0.5" />

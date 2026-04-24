@@ -305,8 +305,24 @@ async function main() {
   for (const setting of settings) {
     await prisma.settings.upsert({
       where: { key: setting.key },
-      update: { value: setting.value },
+      update: {}, // Don't overwrite existing values
       create: setting,
+    });
+  }
+
+  // Social links — idempotent, don't overwrite production edits
+  const socialDefaults = [
+    { key: "social_instagram", value: "https://www.instagram.com/nesterchuk_anatoliy" },
+    { key: "social_youtube", value: "https://youtube.com/@nesterchuk_anatoliy" },
+    { key: "social_facebook", value: "https://www.facebook.com/profile.php?id=100025198117909" },
+    { key: "social_tiktok", value: "https://www.tiktok.com/@nesterchuk_anatoliy" },
+  ];
+
+  for (const s of socialDefaults) {
+    await prisma.settings.upsert({
+      where: { key: s.key },
+      update: {}, // Don't overwrite
+      create: s,
     });
   }
 

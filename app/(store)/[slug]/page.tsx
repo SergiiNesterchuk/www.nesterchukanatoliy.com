@@ -9,10 +9,11 @@ import { CategoryService } from "@/services/CategoryService";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { ProductGrid } from "@/components/catalog/ProductGrid";
 import { SortingSelect } from "@/components/catalog/SortingSelect";
-import { ProductGallery } from "@/components/catalog/ProductGallery";
-import { ProductInfo } from "@/components/catalog/ProductInfo";
-import { ProductTabs } from "@/components/catalog/ProductTabs";
-import { ProductReviews } from "@/components/catalog/ProductReviews";
+import { Layout1Classic } from "@/components/product-layouts/Layout1Classic";
+import { Layout2Sticky } from "@/components/product-layouts/Layout2Sticky";
+import { Layout3Editorial } from "@/components/product-layouts/Layout3Editorial";
+import { Layout4Compact } from "@/components/product-layouts/Layout4Compact";
+import { Layout5MobileAccordion } from "@/components/product-layouts/Layout5MobileAccordion";
 import { JsonLd } from "@/components/seo/JsonLd";
 import {
   buildBreadcrumbJsonLd,
@@ -214,15 +215,30 @@ async function CategoryView({
 async function ProductView({ slug }: { slug: string }) {
   const product = await ProductService.getBySlug(slug);
 
+  // Get layout setting
+  let layout = "layout_2"; // default: sticky gallery
+  try {
+    const { prisma } = await import("@/shared/db");
+    const setting = await prisma.settings.findUnique({ where: { key: "product_page_layout" } });
+    if (setting?.value) layout = setting.value;
+  } catch { /* fallback */ }
+
+  const layouts: Record<string, React.FC<{ product: typeof product }>> = {
+    layout_1: Layout1Classic,
+    layout_2: Layout2Sticky,
+    layout_3: Layout3Editorial,
+    layout_4: Layout4Compact,
+    layout_5: Layout5MobileAccordion,
+  };
+
+  const LayoutComponent = layouts[layout] || Layout2Sticky;
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       <JsonLd
         data={buildBreadcrumbJsonLd([
           { name: "Головна", url: SITE_URL },
-          {
-            name: product.category.name,
-            url: `${SITE_URL}/${product.category.slug}/`,
-          },
+          { name: product.category.name, url: `${SITE_URL}/${product.category.slug}/` },
           { name: product.name, url: `${SITE_URL}/${product.slug}/` },
         ])}
       />
@@ -235,16 +251,9 @@ async function ProductView({ slug }: { slug: string }) {
         ]}
       />
 
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12">
-        <ProductGallery images={product.images} productName={product.name} />
-        <ProductInfo product={product} />
+      <div className="mt-6">
+        <LayoutComponent product={product} />
       </div>
-
-      <div className="mt-10">
-        <ProductTabs description={product.description} />
-      </div>
-
-      <ProductReviews productId={product.id} />
     </div>
   );
 }

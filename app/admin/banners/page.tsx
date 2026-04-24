@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/Input";
 interface Setting { key: string; value: string; }
 
 const SECTIONS = [
+  { title: "Стиль сторінки товару", hint: "Оберіть як виглядає сторінка товару для покупця.", items: [
+    { key: "product_page_layout", label: "Layout", type: "select", default: "layout_2", options: ["layout_1", "layout_2", "layout_3", "layout_4", "layout_5"],
+      optionLabels: { layout_1: "Класичний: фото зліва, купівля справа", layout_2: "Sticky: фото фіксується, опис скролиться", layout_3: "Лендінг: велике фото + довгий опис", layout_4: "Компактний магазин", layout_5: "Мобільний accordion + sticky buy" } },
+  ]},
   { title: "Hero секція", hint: "Вимкніть Hero, якщо хочете, щоб головна одразу починалась із товарів або контентного блоку.", items: [
     { key: "homepage_show_hero", label: "Показувати Hero section", type: "select", default: "true", options: ["true", "false"] },
     { key: "homepage_title", label: "Заголовок", type: "text", default: "Натуральні продукти" },
@@ -120,11 +124,11 @@ export default function AdminBannersPage() {
                     <div key={item.key}>
                       <label className="block text-sm font-medium text-gray-700 mb-1">{item.label}</label>
                       <select value={value} onChange={(e) => update(item.key, e.target.value)} className="w-full md:w-64 rounded-lg border border-gray-300 px-3 py-2 text-sm">
-                        {(item.options as string[]).map((o) => (
-                          <option key={o} value={o}>
-                            {o === "true" ? "Так" : o === "false" ? "Ні" : o === "after_hero" ? "Після hero" : o === "after_categories" ? "Після категорій" : o === "after_products" ? "Після товарів" : o}
-                          </option>
-                        ))}
+                        {(item.options as string[]).map((o) => {
+                          const labels = (item as { optionLabels?: Record<string, string> }).optionLabels;
+                          const label = labels?.[o] || (o === "true" ? "Так" : o === "false" ? "Ні" : o === "after_hero" ? "Після hero" : o === "after_categories" ? "Після категорій" : o === "after_products" ? "Після товарів" : o);
+                          return <option key={o} value={o}>{label}</option>;
+                        })}
                       </select>
                     </div>
                   );
