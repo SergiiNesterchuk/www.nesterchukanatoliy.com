@@ -28,9 +28,9 @@ export function normalizeBaseUrl(rawUrl: string): string {
  * Normalizes base URL, ensures single slash between base and path, no %20.
  */
 export function buildAbsoluteUrl(path: string): string {
-  // Priority: SITE_URL (server runtime) > RAILWAY_PUBLIC_DOMAIN (auto-set by Railway) > NEXT_PUBLIC_SITE_URL (build-time) > fallback
-  const raw = process.env.SITE_URL
-    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "")
+  // Priority: RAILWAY_PUBLIC_DOMAIN (always correct on Railway) > SITE_URL > NEXT_PUBLIC_SITE_URL > fallback
+  const raw = (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "")
+    || process.env.SITE_URL
     || process.env.NEXT_PUBLIC_SITE_URL
     || "https://nesterchukanatoliy.com";
   const base = normalizeBaseUrl(raw);

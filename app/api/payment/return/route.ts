@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildAbsoluteUrl } from "@/shared/url";
+import { createLogger } from "@/shared/logger";
+
+const logger = createLogger("PaymentReturn");
 
 /**
  * WayForPay redirects user back via POST to returnUrl.
- * This API route handles POST/GET, extracts order reference,
- * and redirects to success page using PUBLIC domain (not internal localhost).
+ * Extracts order ref and redirects to success page.
  */
 export async function POST(request: NextRequest) {
   const order = request.nextUrl.searchParams.get("order") || "";
@@ -14,9 +16,9 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const bodyOrder = formData.get("orderReference") as string;
     if (bodyOrder && !orderRef) orderRef = bodyOrder;
-  } catch {
-    // Not form data, ignore
-  }
+  } catch { /* Not form data */ }
+
+  logger.info("Payment return POST", { orderRef });
 
   const successUrl = orderRef
     ? buildAbsoluteUrl(`/checkout/success?order=${orderRef}`)
@@ -27,6 +29,8 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   const order = request.nextUrl.searchParams.get("order") || "";
+
+  logger.info("Payment return GET", { order });
 
   const successUrl = order
     ? buildAbsoluteUrl(`/checkout/success?order=${order}`)

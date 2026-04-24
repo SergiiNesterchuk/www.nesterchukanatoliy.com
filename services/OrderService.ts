@@ -131,13 +131,24 @@ export class OrderService {
 
     const provider = getPaymentProvider("wayforpay");
 
+    const returnUrl = buildAbsoluteUrl(`/api/payment/return?order=${order.orderNumber}`);
+    const callbackUrl = buildAbsoluteUrl("/api/payment/callback");
+
+    logger.info("Creating WayForPay session", {
+      orderNumber: order.orderNumber,
+      amount: payAmount,
+      purpose: isCodPrepayment ? "cod_prepayment" : "full_payment",
+      returnUrl,
+      callbackUrl,
+    });
+
     const session = await provider.createPaymentSession({
       orderNumber: order.orderNumber,
       amount: payAmount,
       currency: order.currency,
       description,
-      returnUrl: buildAbsoluteUrl(`/api/payment/return?order=${order.orderNumber}`),
-      callbackUrl: buildAbsoluteUrl("/api/payment/callback"),
+      returnUrl,
+      callbackUrl,
       customerEmail: order.customerEmail || undefined,
       // For prepayment: single line item with prepayment amount
       items: isCodPrepayment
