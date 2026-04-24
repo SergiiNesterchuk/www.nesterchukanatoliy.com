@@ -10,6 +10,10 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   metadataBase: new URL(SITE_URL),
+  icons: {
+    icon: "/api/favicon",
+    apple: "/api/favicon",
+  },
   openGraph: {
     type: "website",
     locale: "uk_UA",

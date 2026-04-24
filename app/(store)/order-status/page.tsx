@@ -36,28 +36,62 @@ const PAYMENT_LABELS: Record<string, string> = {
   pending: "Очікує оплати", awaiting_prepayment: "Очікує передплати", partial_paid: "Передплата отримана", cod_pending: "Оплата при отриманні", paid: "Оплачено", failed: "Помилка оплати", prepayment_failed: "Передплата не завершена", refunded: "Повернено",
 };
 
+interface OrderListItem {
+  orderNumber: string;
+  status: string;
+  paymentStatus: string;
+  total: number;
+  createdAt: string;
+}
+
 export default function OrderStatusPage() {
+  const [mode, setMode] = useState<"number" | "name">("number");
   const [orderNumber, setOrderNumber] = useState("");
   const [phone, setPhone] = useState("");
+  const [customerName, setCustomerName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [order, setOrder] = useState<OrderStatus | null>(null);
+  const [orderList, setOrderList] = useState<OrderListItem[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!orderNumber.trim() || !phone.trim()) { setError("Заповніть обидва поля"); return; }
-    setLoading(true); setError(""); setOrder(null);
+    setLoading(true); setError(""); setOrder(null); setOrderList([]);
+
+    if (mode === "number") {
+      if (!orderNumber.trim() || !phone.trim()) { setError("Заповніть номер та телефон"); setLoading(false); return; }
+    } else {
+      if (!phone.trim() || !customerName.trim()) { setError("Заповніть телефон та ім'я"); setLoading(false); return; }
+    }
+
     try {
+      const body = mode === "number"
+        ? { orderNumber: orderNumber.trim(), phone: phone.trim() }
+        : { phone: phone.trim(), customerName: customerName.trim(), mode: "phone_name" };
+
       const res = await fetch("/api/order-status", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderNumber: orderNumber.trim(), phone: phone.trim() }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (data.success) { setOrder(data.data); }
-      else { setError(data.error?.message || "Замовлення не знайдено"); }
+
+      if (data.success) {
+        if (data.data) { setOrder(data.data); }
+        if (data.list) { setOrderList(data.list); }
+      } else {
+        setError(data.error?.message || "Замовлення не знайдено");
+      }
     } catch { setError("Помилка з'єднання"); }
     finally { setLoading(false); }
+  };
+
+  const selectFromList = (num: string) => {
+    setOrderNumber(num);
+    setMode("number");
+    // Trigger search with this order number
+    setOrderList([]);
+    setOrder(null);
   };
 
   const statusColor = (s: string) => {
@@ -70,16 +104,48 @@ export default function OrderStatusPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <h1 className="text-2xl font-bold text-gray-900 mb-2">Статус замовлення</h1>
-      <p className="text-gray-500 mb-6">Введіть номер замовлення та телефон, вказаний при оформленні</p>
+      <p className="text-gray-500 mb-4">Перевірте статус вашого замовлення</p>
+
+      {/* Mode tabs */}
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setMode("number")} className={`px-4 py-2 rounded-lg text-sm font-medium ${mode === "number" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600"}`}>За номером замовлення</button>
+        <button onClick={() => setMode("name")} className={`px-4 py-2 rounded-lg text-sm font-medium ${mode === "name" ? "bg-green-600 text-white" : "bg-gray-100 text-gray-600"}`}>За телефоном та ім'ям</button>
+      </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl border p-6 space-y-4 mb-8">
-        <Input id="orderNumber" label="Номер замовлення" value={orderNumber}
-          onChange={(e) => setOrderNumber(e.target.value)} placeholder="20260424-XXXXXX" required />
-        <Input id="phone" label="Телефон" type="tel" value={phone}
-          onChange={(e) => setPhone(e.target.value)} placeholder="+380 XX XXX XX XX" required />
+        {mode === "number" ? (
+          <>
+            <Input id="orderNumber" label="Номер замовлення *" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="K-5001" />
+            <Input id="phone" label="Телефон *" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+380 XX XXX XX XX" />
+          </>
+        ) : (
+          <>
+            <Input id="phone2" label="Телефон *" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+380 XX XXX XX XX" />
+            <Input id="customerName" label="Ім'я або прізвище *" value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="Прізвище" />
+          </>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <Button type="submit" loading={loading} className="w-full">Перевірити статус</Button>
+        <Button type="submit" loading={loading} className="w-full">Знайти замовлення</Button>
       </form>
+
+      {/* Order list from phone+name search */}
+      {orderList.length > 0 && !order && (
+        <div className="mb-8 bg-white rounded-xl border overflow-hidden">
+          <div className="p-4 border-b"><h2 className="font-semibold">Знайдено замовлень: {orderList.length}</h2></div>
+          {orderList.map((o) => (
+            <button key={o.orderNumber} onClick={() => selectFromList(o.orderNumber)} className="w-full text-left px-4 py-3 hover:bg-green-50 border-b last:border-0 flex justify-between items-center">
+              <div>
+                <span className="font-medium">{o.orderNumber}</span>
+                <span className="text-gray-400 text-xs ml-2">{new Date(o.createdAt).toLocaleDateString("uk-UA")}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium">{formatPrice(o.total)}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${statusColor(o.status)}`}>{STATUS_LABELS[o.status] || o.status}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
 
       {order && (
         <div className="space-y-6">

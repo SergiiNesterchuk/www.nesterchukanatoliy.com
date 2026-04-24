@@ -24,6 +24,7 @@ const navItems = [
   { href: "/admin/pages", label: "Сторінки", icon: FileText },
   { href: "/admin/payment-methods", label: "Оплата", icon: CreditCard },
   { href: "/admin/redirects", label: "Redirects", icon: CornerDownRight },
+  { href: "/admin/branding", label: "Брендинг", icon: Home },
   { href: "/admin/integration-logs", label: "Інтеграції", icon: AlertCircle },
   { href: "/admin/settings", label: "Налаштування", icon: Settings },
 ];
