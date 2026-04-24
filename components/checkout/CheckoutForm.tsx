@@ -17,6 +17,8 @@ interface Settlement {
   RegionsDescription: string;
   SettlementTypeDescription: string;
   DeliveryCity: string;
+  MainDescription: string;
+  Present: string;
 }
 
 interface Warehouse {
@@ -64,52 +66,99 @@ export function CheckoutForm() {
   const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
   const [warehouseFilter, setWarehouseFilter] = useState<"all" | "branch" | "postomat">("all");
   const [courierAddress, setCourierAddress] = useState("");
+  const [npError, setNpError] = useState("");
 
   // Debounced city search
   useEffect(() => {
     if (!cityQuery || cityQuery.length < 2 || selectedCity) return;
     const timer = setTimeout(async () => {
       setCityLoading(true);
+      setNpError("");
       try {
         const res = await fetch(`/api/novaposhta/settlements?query=${encodeURIComponent(cityQuery)}`);
         const data = await res.json();
-        if (data.success) { setSettlements(data.data); setShowCityDropdown(true); }
-      } catch { setSettlements([]); }
-      finally { setCityLoading(false); }
+        if (data.success && data.data?.length > 0) {
+          setSettlements(data.data);
+          setShowCityDropdown(true);
+        } else if (!data.success && data.error?.message) {
+          setNpError(data.error.message);
+          setSettlements([]);
+        } else {
+          setSettlements([]);
+          setShowCityDropdown(true); // show "nothing found"
+        }
+      } catch {
+        setNpError("Не вдалося з'єднатися з Новою Поштою");
+        setSettlements([]);
+      } finally {
+        setCityLoading(false);
+      }
     }, 400);
     return () => clearTimeout(timer);
   }, [cityQuery, selectedCity]);
 
-  const loadWarehouses = useCallback(async (cityRef: string, type: string = "all") => {
+  const loadWarehouses = useCallback(async (ref: string, type: string = "all") => {
     setWarehouseLoading(true);
+    setNpError("");
     try {
-      const res = await fetch(`/api/novaposhta/warehouses?cityRef=${cityRef}&type=${type}`);
+      // Try DeliveryCity ref first, then settlement Ref
+      const res = await fetch(`/api/novaposhta/warehouses?cityRef=${encodeURIComponent(ref)}&type=${type}`);
       const data = await res.json();
-      if (data.success) setWarehouses(data.data);
-    } catch { setWarehouses([]); }
-    finally { setWarehouseLoading(false); }
+      if (data.success) {
+        setWarehouses(data.data || []);
+      } else if (data.error?.message) {
+        setNpError(data.error.message);
+        setWarehouses([]);
+      }
+    } catch {
+      setNpError("Не вдалося завантажити відділення");
+      setWarehouses([]);
+    } finally {
+      setWarehouseLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (selectedCity) loadWarehouses(selectedCity.DeliveryCity, warehouseFilter);
+    if (selectedCity) {
+      // Use DeliveryCity (city-level Ref) for warehouses — this is what NovaPoshta expects
+      const ref = selectedCity.DeliveryCity || selectedCity.Ref;
+      loadWarehouses(ref, warehouseFilter);
+    }
   }, [selectedCity, warehouseFilter, loadWarehouses]);
 
   const selectCity = (s: Settlement) => {
-    setSelectedCity(s); setCityQuery(s.Description); setShowCityDropdown(false);
-    setSelectedWarehouse(null); setWarehouseQuery(""); setErrors((p) => ({ ...p, city: "" }));
+    setSelectedCity(s);
+    setCityQuery(s.Present || s.Description);
+    setShowCityDropdown(false);
+    setSelectedWarehouse(null);
+    setWarehouseQuery("");
+    setWarehouses([]);
+    setErrors((p) => ({ ...p, city: "" }));
   };
 
   const selectPopularCity = async (query: string) => {
-    setCityQuery(query); setCityLoading(true);
+    setCityQuery(query);
+    setCityLoading(true);
+    setNpError("");
     try {
       const res = await fetch(`/api/novaposhta/settlements?query=${encodeURIComponent(query)}`);
       const data = await res.json();
-      if (data.success && data.data.length > 0) selectCity(data.data[0]);
-    } finally { setCityLoading(false); }
+      if (data.success && data.data?.length > 0) {
+        selectCity(data.data[0]);
+      } else if (data.error?.message) {
+        setNpError(data.error.message);
+      }
+    } catch {
+      setNpError("Не вдалося знайти місто");
+    } finally {
+      setCityLoading(false);
+    }
   };
 
   const selectWarehouse = (w: Warehouse) => {
-    setSelectedWarehouse(w); setWarehouseQuery(w.Description); setShowWarehouseDropdown(false);
+    setSelectedWarehouse(w);
+    setWarehouseQuery(w.Description);
+    setShowWarehouseDropdown(false);
     setErrors((p) => ({ ...p, warehouse: "" }));
   };
 
@@ -251,14 +300,17 @@ export function CheckoutForm() {
             {cityLoading && <Spinner className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4" />}
           </div>
           {errors.city && <p className="mt-1 text-xs text-red-600">{errors.city}</p>}
-          {showCityDropdown && settlements.length > 0 && (
+          {npError && <p className="mt-1 text-xs text-orange-600">{npError}</p>}
+          {showCityDropdown && !cityLoading && (
             <div className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
-              {settlements.map((s) => (
+              {settlements.length > 0 ? settlements.map((s) => (
                 <button key={s.Ref} type="button" onClick={() => selectCity(s)} className="w-full text-left px-3 py-2 hover:bg-green-50 text-sm border-b last:border-0">
-                  <span className="font-medium">{s.Description}</span>
-                  <span className="text-gray-400 text-xs ml-2">{s.SettlementTypeDescription}, {s.AreaDescription} обл.</span>
+                  <span className="font-medium">{s.MainDescription || s.Description}</span>
+                  <span className="text-gray-400 text-xs ml-2">{s.SettlementTypeDescription}, {s.AreaDescription} обл.{s.RegionsDescription ? `, ${s.RegionsDescription}` : ""}</span>
                 </button>
-              ))}
+              )) : (
+                <div className="px-3 py-3 text-sm text-gray-500 text-center">Нічого не знайдено</div>
+              )}
             </div>
           )}
         </div>
