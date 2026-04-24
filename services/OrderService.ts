@@ -7,6 +7,7 @@ import { ValidationError, PaymentError } from "@/shared/errors";
 import { createLogger } from "@/shared/logger";
 import { buildAbsoluteUrl } from "@/shared/url";
 import { generatePublicOrderNumber } from "@/shared/order-number";
+import { generateOrderAccessToken } from "@/shared/access-token";
 
 const logger = createLogger("OrderService");
 
@@ -94,7 +95,18 @@ export class OrderService {
         update: { name: input.customerName, email: input.customerEmail || undefined },
         create: { phoneNormalized: normalizedPhone, name: input.customerName, email: input.customerEmail || undefined },
       });
-      await prisma.order.update({ where: { id: order.id }, data: { customerId: customer.id } });
+      // Generate access token for order status link (used in emails)
+      const accessToken = generateOrderAccessToken();
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          customerId: customer.id,
+          accessTokenHash: accessToken.hash,
+          accessTokenExpiresAt: accessToken.expiresAt,
+        },
+      });
+      // Store raw token temporarily on order object for email use
+      (order as Record<string, unknown>)._accessToken = accessToken.token;
 
       // Record initial status
       await prisma.orderStatusHistory.create({

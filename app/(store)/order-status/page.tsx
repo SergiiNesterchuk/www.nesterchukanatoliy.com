@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { formatPrice } from "@/shared/money";
@@ -51,6 +51,32 @@ export default function OrderStatusPage() {
   const [customerName, setCustomerName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [tokenChecked, setTokenChecked] = useState(false);
+
+  // Auto-load order from token in URL (from email link)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    if (token && !tokenChecked) {
+      setTokenChecked(true);
+      setLoading(true);
+      fetch("/api/order-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      })
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && data.data) {
+            setOrder(data.data);
+          } else {
+            setError(data.error?.message || "Посилання недійсне");
+          }
+        })
+        .catch(() => setError("Помилка з'єднання"))
+        .finally(() => setLoading(false));
+    }
+  }, [tokenChecked]);
   const [order, setOrder] = useState<OrderStatus | null>(null);
   const [orderList, setOrderList] = useState<OrderListItem[]>([]);
 

@@ -108,6 +108,8 @@ model Order {
   source             String       @default("website")
   emailSentAt        DateTime?
   smsSentAt          DateTime?
+  accessTokenHash    String?      @unique
+  accessTokenExpiresAt DateTime?
   customerId         String?
   customer           Customer?    @relation(fields: [customerId], references: [id])
   trackingNumber     String?

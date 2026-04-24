@@ -41,7 +41,34 @@ function sanitizeOrder(order: {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { orderNumber, phone, customerName, mode } = body;
+    const { orderNumber, phone, customerName, mode, token } = body;
+
+    // Mode 0: token-based access (from email link)
+    if (token) {
+      const { hashAccessToken } = await import("@/shared/access-token");
+      const tokenHash = hashAccessToken(token);
+
+      const order = await prisma.order.findFirst({
+        where: {
+          accessTokenHash: tokenHash,
+          accessTokenExpiresAt: { gte: new Date() },
+        },
+        include: {
+          items: true,
+          statusHistory: { orderBy: { createdAt: "desc" }, take: 10 },
+        },
+      });
+
+      if (!order) {
+        return NextResponse.json({
+          success: false,
+          error: { message: "Посилання недійсне або застаріло. Використайте форму нижче." },
+          tokenExpired: true,
+        });
+      }
+
+      return NextResponse.json({ success: true, data: sanitizeOrder(order) });
+    }
 
     // Mode 1: orderNumber + phone (default)
     if (mode !== "phone_name") {

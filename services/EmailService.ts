@@ -26,6 +26,7 @@ interface OrderEmailData {
   deliveryCity: string | null;
   deliveryBranchName: string | null;
   items: Array<{ name: string; quantity: number; price: number; lineTotal: number }>;
+  accessToken?: string;
 }
 
 export class EmailService {
@@ -58,7 +59,11 @@ export class EmailService {
       paymentText = "Очікує оплати";
     }
 
-    const statusUrl = `${siteUrl.replace(/\/+$/, "")}/order-status`;
+    // Use token-based URL if available (one-click access), fallback to form
+    const baseStatusUrl = `${siteUrl.replace(/\/+$/, "")}/order-status`;
+    const statusUrl = order.accessToken
+      ? `${baseStatusUrl}?token=${order.accessToken}`
+      : baseStatusUrl;
     const totalFormatted = formatPrice(order.total);
 
     const itemsHtml = order.items

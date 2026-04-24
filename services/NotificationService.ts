@@ -42,6 +42,7 @@ export class NotificationService {
           paymentStatus: order.paymentStatus,
           deliveryCity: order.deliveryCity,
           deliveryBranchName: order.deliveryBranchName,
+          accessToken: (order as unknown as Record<string, unknown>)._accessToken as string | undefined,
           items: order.items,
         });
 
