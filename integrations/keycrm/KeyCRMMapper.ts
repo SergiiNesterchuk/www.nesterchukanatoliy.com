@@ -10,6 +10,7 @@ interface LocalOrder {
   deliveryMethod: string;
   deliveryCity: string | null;
   deliveryAddress: string | null;
+  deliveryBranchRef: string | null;
   deliveryBranchName: string | null;
   comment: string | null;
   total: number;
@@ -30,9 +31,6 @@ interface LocalOrder {
   }>;
 }
 
-/**
- * Normalize phone to format KeyCRM expects: digits only or +380...
- */
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/[\s\-\(\)]/g, "");
   if (digits.startsWith("+")) return digits;
@@ -41,10 +39,6 @@ function normalizePhone(phone: string): string {
   return digits;
 }
 
-/**
- * Remove undefined values from object — prevents JSON serialization issues.
- * KeyCRM API may 500 on undefined/null in unexpected fields.
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function stripUndefined<T extends Record<string, any>>(obj: T): T {
   const result = {} as T;
@@ -56,6 +50,33 @@ function stripUndefined<T extends Record<string, any>>(obj: T): T {
   return result;
 }
 
+function buildDeliveryComment(order: LocalOrder): string {
+  const parts: string[] = [];
+  parts.push(`Замовлення з сайту: ${order.orderNumber}`);
+
+  // Delivery info
+  const deliveryType = order.deliveryMethod === "nova_poshta_courier" ? "Адресна" : "Відділення/Поштомат";
+  parts.push(`Доставка: Нова Пошта (${deliveryType})`);
+
+  if (order.deliveryCity) parts.push(`Місто: ${order.deliveryCity}`);
+
+  if (order.deliveryBranchName) {
+    parts.push(`Відділення: ${order.deliveryBranchName}`);
+  }
+  if (order.deliveryAddress && order.deliveryMethod === "nova_poshta_courier") {
+    parts.push(`Адреса: ${order.deliveryAddress}`);
+  }
+  if (order.deliveryBranchRef) {
+    parts.push(`NP Ref: ${order.deliveryBranchRef}`);
+  }
+
+  if (order.comment?.trim()) {
+    parts.push(`Коментар клієнта: ${order.comment.trim()}`);
+  }
+
+  return parts.join("\n");
+}
+
 export class KeyCRMMapper {
   static mapOrderToKeycrm(
     order: LocalOrder,
@@ -65,7 +86,6 @@ export class KeyCRMMapper {
     const phone = normalizePhone(order.customerPhone);
     const buyerName = (order.customerName || "").trim() || "Клієнт";
 
-    // Build buyer — only include email if valid and non-empty
     const buyer: KeyCRMOrderCreate["buyer"] = {
       full_name: buyerName,
       phone,
@@ -74,7 +94,6 @@ export class KeyCRMMapper {
       buyer.email = order.customerEmail.trim();
     }
 
-    // Build products — ensure numeric types
     const products = order.items.map((item) => {
       const product: KeyCRMOrderCreate["products"][0] = {
         name: (item.name || "").trim() || "Товар",
@@ -82,22 +101,23 @@ export class KeyCRMMapper {
         price: Number(toHryvni(item.price)) || 0,
         quantity: Number(item.quantity) || 1,
       };
-      if (item.imageUrl) {
-        product.picture = item.imageUrl;
-      }
+      if (item.imageUrl) product.picture = item.imageUrl;
       return stripUndefined(product);
     });
 
-    // Build shipping — use empty strings instead of undefined for optional fields
+    // Build full shipping address text for KeyCRM
+    const shippingAddress = order.deliveryBranchName
+      || order.deliveryAddress
+      || "";
+
     const shipping = stripUndefined({
       delivery_service: deliveryService,
       shipping_address_city: order.deliveryCity || "",
-      shipping_address: order.deliveryBranchName || order.deliveryAddress || "",
+      shipping_address: shippingAddress,
       recipient_full_name: buyerName,
       recipient_phone: phone,
     });
 
-    // Build order payload
     const keycrmOrder: KeyCRMOrderCreate = {
       source_id: sourceId,
       buyer,
@@ -105,22 +125,21 @@ export class KeyCRMMapper {
       shipping,
     };
 
-    // Add comment only if present
-    if (order.comment && order.comment.trim()) {
+    if (order.comment?.trim()) {
       keycrmOrder.buyer_comment = order.comment.trim();
     }
 
-    // Add UTM only if present (avoid empty strings)
+    // UTM
     if (order.utmSource) keycrmOrder.utm_source = order.utmSource;
     if (order.utmMedium) keycrmOrder.utm_medium = order.utmMedium;
     if (order.utmCampaign) keycrmOrder.utm_campaign = order.utmCampaign;
     if (order.utmTerm) keycrmOrder.utm_term = order.utmTerm;
     if (order.utmContent) keycrmOrder.utm_content = order.utmContent;
 
-    // Add manager_comment with local order reference
-    keycrmOrder.manager_comment = `Замовлення з сайту: ${order.orderNumber}`;
+    // Manager comment with full delivery details for TTN creation
+    keycrmOrder.manager_comment = buildDeliveryComment(order);
 
-    // Attach payment if paid
+    // Payment
     if (order.paymentStatus === "paid") {
       keycrmOrder.payments = [
         {
@@ -140,7 +159,7 @@ export class KeyCRMMapper {
   static mapDeliveryService(method: string): string {
     const mapping: Record<string, string> = {
       nova_poshta_branch: "nova_poshta",
-      nova_poshta_courier: "nova_poshta_courier",
+      nova_poshta_courier: "nova_poshta",
     };
     return mapping[method] || "other";
   }

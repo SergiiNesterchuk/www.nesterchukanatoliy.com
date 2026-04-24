@@ -263,8 +263,8 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       <section>
         <h2 className="text-lg font-semibold mb-4">1. Контактні дані</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input id="customerName" label="Ім'я та прізвище *" value={customerName} onChange={(e) => { setCustomerName(e.target.value); setErrors((p) => ({ ...p, customerName: "" })); }} error={errors.customerName} placeholder="Анатолій Нестерчук" />
-          <Input id="customerPhone" label="Телефон *" type="tel" value={customerPhone} onChange={(e) => { setCustomerPhone(e.target.value); setErrors((p) => ({ ...p, customerPhone: "" })); }} onBlur={handlePhoneBlur} error={errors.customerPhone} placeholder="+380 99 363 33 00" />
+          <Input id="customerName" label="Ім'я та прізвище *" value={customerName} onChange={(e) => { setCustomerName(e.target.value); setErrors((p) => ({ ...p, customerName: "" })); }} error={errors.customerName} placeholder="Ім'я Прізвище" />
+          <Input id="customerPhone" label="Телефон *" type="tel" value={customerPhone} onChange={(e) => { setCustomerPhone(e.target.value); setErrors((p) => ({ ...p, customerPhone: "" })); }} onBlur={handlePhoneBlur} error={errors.customerPhone} placeholder="+380 XX XXX XX XX" />
           <Input id="customerEmail" label="Email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="email@example.com" className="md:col-span-2" />
         </div>
       </section>

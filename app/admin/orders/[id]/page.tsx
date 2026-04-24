@@ -16,6 +16,7 @@ interface OrderDetail {
   deliveryMethod: string;
   deliveryCity: string | null;
   deliveryAddress: string | null;
+  deliveryBranchRef: string | null;
   deliveryBranchName: string | null;
   comment: string | null;
   subtotal: number;
@@ -133,16 +134,21 @@ export default function AdminOrderDetailPage() {
         </div>
       </div>
 
-      {/* Customer */}
+      {/* Customer & Delivery */}
       <div className="bg-white rounded-xl border p-4">
-        <h2 className="font-semibold mb-3">Клієнт</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+        <h2 className="font-semibold mb-3">Клієнт та доставка</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
           <div><span className="text-gray-500">Ім'я:</span> {order.customerName}</div>
           <div><span className="text-gray-500">Телефон:</span> {order.customerPhone}</div>
           <div><span className="text-gray-500">Email:</span> {order.customerEmail || "—"}</div>
-          <div><span className="text-gray-500">Доставка:</span> {order.deliveryMethod}</div>
+          <div><span className="text-gray-500">Спосіб доставки:</span> {
+            order.deliveryMethod === "nova_poshta_branch" ? "Нова Пошта (відділення)" :
+            order.deliveryMethod === "nova_poshta_courier" ? "Нова Пошта (кур'єр)" : order.deliveryMethod
+          }</div>
           <div><span className="text-gray-500">Місто:</span> {order.deliveryCity || "—"}</div>
-          <div><span className="text-gray-500">Адреса:</span> {order.deliveryBranchName || order.deliveryAddress || "—"}</div>
+          <div><span className="text-gray-500">Відділення/поштомат:</span> {order.deliveryBranchName || "—"}</div>
+          {order.deliveryBranchRef && <div><span className="text-gray-500">NP Ref:</span> <span className="font-mono text-xs">{order.deliveryBranchRef}</span></div>}
+          {order.deliveryAddress && <div><span className="text-gray-500">Адреса:</span> {order.deliveryAddress}</div>}
         </div>
         {order.comment && <div className="mt-2 text-sm"><span className="text-gray-500">Коментар:</span> {order.comment}</div>}
       </div>
