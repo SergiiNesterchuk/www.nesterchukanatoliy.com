@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { OrderService } from "@/services/OrderService";
 import { checkoutSchema } from "@/validators/checkout.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
+import { prisma } from "@/shared/db";
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,20 +29,59 @@ export async function POST(request: NextRequest) {
       idempotencyKey: validated.idempotencyKey,
     });
 
-    const payment = await OrderService.createPaymentForOrder(order.id);
+    // Check if payment method requires online payment
+    let requiresOnlinePayment = true;
+    try {
+      const pm = await prisma.paymentMethod.findUnique({
+        where: { key: validated.paymentMethod },
+        select: { requiresOnlinePayment: true },
+      });
+      if (pm) requiresOnlinePayment = pm.requiresOnlinePayment;
+    } catch {
+      // Fallback: card_online requires payment, anything else doesn't
+      requiresOnlinePayment = validated.paymentMethod.includes("card") || validated.paymentMethod === "card_online";
+    }
 
-    return successResponse({
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      payment: payment
-        ? {
-            url: payment.paymentUrl,
-            sessionId: payment.sessionId,
-            provider: payment.provider,
-            formFields: (payment as unknown as Record<string, unknown>).formFields,
-          }
-        : null,
-    });
+    if (requiresOnlinePayment) {
+      // Online payment flow (WayForPay)
+      const payment = await OrderService.createPaymentForOrder(order.id);
+      return successResponse({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        paymentMethod: validated.paymentMethod,
+        requiresOnlinePayment: true,
+        payment: payment
+          ? {
+              url: payment.paymentUrl,
+              sessionId: payment.sessionId,
+              provider: payment.provider,
+              formFields: (payment as unknown as Record<string, unknown>).formFields,
+            }
+          : null,
+      });
+    } else {
+      // COD / no online payment flow
+      // Sync to KeyCRM immediately (order is created, payment will be collected on delivery)
+      if (process.env.CRM_SYNC_ENABLED !== "false") {
+        const { prisma: db } = await import("@/shared/db");
+        await db.order.update({
+          where: { id: order.id },
+          data: { keycrmSyncStatus: "pending" },
+        });
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.createOrder(order.id).catch(console.error);
+        });
+      }
+
+      return successResponse({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        paymentMethod: validated.paymentMethod,
+        requiresOnlinePayment: false,
+        payment: null,
+      });
+    }
   } catch (error) {
     return errorResponse(error);
   }

@@ -305,6 +305,36 @@ async function main() {
     },
   });
 
+  // Payment methods (idempotent — won't overwrite admin changes)
+  const paymentMethods = [
+    {
+      key: "card_wayforpay",
+      title: "Оплата карткою онлайн",
+      description: "Visa / Mastercard через захищений платіжний сервіс",
+      customerInstruction: "Після оформлення ви будете перенаправлені на сторінку оплати.",
+      enabled: true,
+      requiresOnlinePayment: true,
+      sortOrder: 1,
+    },
+    {
+      key: "cod_cash_on_delivery",
+      title: "Оплата при отриманні (накладений платіж)",
+      description: "Оплата при отриманні на відділенні Нової Пошти",
+      customerInstruction: "Ви оплатите замовлення при отриманні на пошті.",
+      enabled: false,
+      requiresOnlinePayment: false,
+      sortOrder: 2,
+    },
+  ];
+
+  for (const pm of paymentMethods) {
+    await prisma.paymentMethod.upsert({
+      where: { key: pm.key },
+      update: {}, // Don't overwrite admin changes
+      create: pm,
+    });
+  }
+
   console.log("Seed completed successfully");
 }
 

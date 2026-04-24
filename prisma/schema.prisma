@@ -246,6 +246,19 @@ model SyncJob {
   @@index([entityType, entityId])
 }
 
+model PaymentMethod {
+  id                    String   @id @default(cuid())
+  key                   String   @unique // card_wayforpay, cod_cash_on_delivery
+  title                 String   // "Оплата карткою онлайн"
+  description           String?  // Short description for checkout
+  customerInstruction   String?  @db.Text // Instruction shown after order
+  enabled               Boolean  @default(true)
+  requiresOnlinePayment Boolean  @default(true)
+  sortOrder             Int      @default(0)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
 model Customer {
   id              String   @id @default(cuid())
   phoneNormalized String   @unique

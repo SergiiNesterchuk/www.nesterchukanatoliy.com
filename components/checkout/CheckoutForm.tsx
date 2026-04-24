@@ -39,6 +39,13 @@ const POPULAR_CITIES = [
   { name: "Бровари", query: "Бровари" },
 ];
 
+interface PaymentMethodOption {
+  key: string;
+  title: string;
+  description: string | null;
+  requiresOnlinePayment: boolean;
+}
+
 export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }) {
   const { items, totalPrice, clearCart } = useCartStore();
   const [submitting, setSubmitting] = useState(false);
@@ -51,6 +58,10 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
   const [deliveryMethod, setDeliveryMethod] = useState("nova_poshta_branch");
   const [comment, setComment] = useState("");
   const [agreedToTerms, setAgreedToTerms] = useState(false);
+
+  // Payment methods from admin
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState("");
 
   // Nova Poshta
   const [cityQuery, setCityQuery] = useState("");
@@ -65,6 +76,26 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
   const [warehouseLoading, setWarehouseLoading] = useState(false);
   const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
   const [warehouseFilter, setWarehouseFilter] = useState<"all" | "branch" | "postomat">("all");
+
+  // Load payment methods on mount
+  useEffect(() => {
+    fetch("/api/payment-methods")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.success && d.data?.length > 0) {
+          setPaymentMethods(d.data);
+          setSelectedPaymentMethod(d.data[0].key);
+        } else {
+          // Fallback
+          setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, requiresOnlinePayment: true }]);
+          setSelectedPaymentMethod("card_online");
+        }
+      })
+      .catch(() => {
+        setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, requiresOnlinePayment: true }]);
+        setSelectedPaymentMethod("card_online");
+      });
+  }, []);
   const [courierAddress, setCourierAddress] = useState("");
   const [npError, setNpError] = useState("");
 
@@ -209,7 +240,7 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
           deliveryBranchName: selectedWarehouse?.Description || undefined,
           deliveryAddress: deliveryMethod === "nova_poshta_courier" ? courierAddress : undefined,
           comment: comment.trim() || undefined,
-          paymentMethod: "card_online",
+          paymentMethod: selectedPaymentMethod || "card_online",
           items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
           idempotencyKey,
           agreedToTerms: true,
@@ -220,12 +251,25 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       if (!data.success) { setGeneralError(data.error?.message || "Помилка"); return; }
 
       clearCart();
-      if (data.data.payment?.formFields) {
+
+      // Save order to localStorage for "recent orders" feature
+      try {
+        const recent = JSON.parse(localStorage.getItem("recentOrders") || "[]") as string[];
+        if (!recent.includes(data.data.orderNumber)) {
+          recent.unshift(data.data.orderNumber);
+          localStorage.setItem("recentOrders", JSON.stringify(recent.slice(0, 10)));
+        }
+      } catch { /* */ }
+
+      if (data.data.requiresOnlinePayment && data.data.payment?.formFields) {
         const paymentData = encodeURIComponent(JSON.stringify({ url: data.data.payment.url, fields: data.data.payment.formFields }));
         window.location.href = `/checkout/pay?data=${paymentData}`;
         return;
       }
-      window.location.href = `/checkout/success?order=${data.data.orderNumber}`;
+
+      // COD or no payment — go directly to success
+      const pmParam = data.data.paymentMethod ? `&pm=${data.data.paymentMethod}` : "";
+      window.location.href = `/checkout/success?order=${data.data.orderNumber}${pmParam}`;
     } catch { setGeneralError("Помилка з'єднання."); }
     finally { setSubmitting(false); }
   };
@@ -356,9 +400,17 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       {/* 3. Payment */}
       <section>
         <h2 className="text-lg font-semibold mb-4">3. Оплата</h2>
-        {Object.entries(PAYMENT_METHODS).map(([, label]) => (
-          <label key={label} className="flex items-center gap-3"><input type="radio" checked readOnly className="text-green-600" /><span className="text-sm">{label}</span></label>
-        ))}
+        <div className="space-y-3">
+          {paymentMethods.map((pm) => (
+            <label key={pm.key} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPaymentMethod === pm.key ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
+              <input type="radio" name="paymentMethod" value={pm.key} checked={selectedPaymentMethod === pm.key} onChange={() => setSelectedPaymentMethod(pm.key)} className="mt-0.5 text-green-600" />
+              <div>
+                <span className="text-sm font-medium">{pm.title}</span>
+                {pm.description && <p className="text-xs text-gray-500 mt-0.5">{pm.description}</p>}
+              </div>
+            </label>
+          ))}
+        </div>
       </section>
 
       <section>

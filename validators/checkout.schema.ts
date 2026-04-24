@@ -11,7 +11,7 @@ export const checkoutSchema = z.object({
   deliveryBranchRef: z.string().max(200).optional(),
   deliveryBranchName: z.string().max(500).optional(),
   comment: z.string().max(1000).optional(),
-  paymentMethod: z.enum(["card_online"]),
+  paymentMethod: z.string().min(1, "Оберіть спосіб оплати"),
   items: z
     .array(
       z.object({
