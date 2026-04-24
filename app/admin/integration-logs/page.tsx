@@ -1,5 +1,6 @@
 import { prisma } from "@/shared/db";
 import { AlertTriangle, CheckCircle, RefreshCw } from "lucide-react";
+import { ResolveAllButton } from "./ResolveAllButton";
 
 export const dynamic = "force-dynamic";
 
@@ -32,12 +33,9 @@ export default async function AdminIntegrationLogsPage() {
 
       {/* Resolve all errors */}
       {stats.recentErrors > 0 && (
-        <form action="/api/admin/integration-logs" method="POST" className="mb-4">
-          <input type="hidden" name="action" value="resolve_all" />
-          <button type="submit" className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 text-gray-700">
-            Позначити всі помилки як вирішені ({stats.recentErrors})
-          </button>
-        </form>
+        <div className="mb-4">
+          <ResolveAllButton count={stats.recentErrors} />
+        </div>
       )}
 
       {/* Health Dashboard */}
