@@ -53,21 +53,70 @@ export async function POST(request: NextRequest) {
       }
 
       const normalizedPhone = normalizePhoneUA(phone);
-      const searchNumber = orderNumber.trim().toUpperCase();
+      const raw = orderNumber.trim().toUpperCase().replace(/\s/g, "");
 
-      // Search by both orderNumber and publicOrderNumber
-      const order = await prisma.order.findFirst({
+      // Minimum 3 chars for search
+      if (raw.length < 3) {
+        return NextResponse.json({
+          success: false,
+          error: { message: "Номер замовлення має бути не менше 3 символів" },
+        });
+      }
+
+      // Normalize: "5001" → search for both "5001" and "K-5001"
+      const searchVariants = [raw];
+      if (/^\d+$/.test(raw)) searchVariants.push(`K-${raw}`);
+      if (raw.startsWith("K") && !raw.startsWith("K-")) searchVariants.push(`K-${raw.substring(1)}`);
+
+      // Try exact match first
+      let order = await prisma.order.findFirst({
         where: {
-          OR: [
-            { orderNumber: searchNumber, customerPhone: normalizedPhone },
-            { publicOrderNumber: searchNumber, customerPhone: normalizedPhone },
-          ],
+          customerPhone: normalizedPhone,
+          OR: searchVariants.flatMap((v) => [
+            { orderNumber: v },
+            { publicOrderNumber: v },
+          ]),
         },
         include: {
           items: true,
           statusHistory: { orderBy: { createdAt: "desc" }, take: 10 },
         },
       });
+
+      // Fallback: partial match (LIKE search) if exact not found
+      if (!order) {
+        const partialOrders = await prisma.order.findMany({
+          where: {
+            customerPhone: normalizedPhone,
+            OR: [
+              { orderNumber: { contains: raw, mode: "insensitive" } },
+              { publicOrderNumber: { contains: raw, mode: "insensitive" } },
+            ],
+          },
+          include: {
+            items: true,
+            statusHistory: { orderBy: { createdAt: "desc" }, take: 5 },
+          },
+          orderBy: { createdAt: "desc" },
+          take: 5,
+        });
+
+        if (partialOrders.length === 1) {
+          order = partialOrders[0];
+        } else if (partialOrders.length > 1) {
+          return NextResponse.json({
+            success: true,
+            data: null,
+            list: partialOrders.map((o) => ({
+              orderNumber: o.publicOrderNumber || o.orderNumber,
+              status: o.status,
+              paymentStatus: o.paymentStatus,
+              total: o.total,
+              createdAt: o.createdAt,
+            })),
+          });
+        }
+      }
 
       if (!order) {
         return NextResponse.json({
