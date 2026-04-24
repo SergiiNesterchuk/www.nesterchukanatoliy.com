@@ -20,7 +20,7 @@ const SECTIONS = [
     { key: "homepage_cta_link", label: "Посилання кнопки", type: "text", default: "/katalog/" },
   ]},
   { title: "Секції на головній", items: [
-    { key: "homepage_show_categories", label: "Показувати категорії", type: "select", default: "true", options: ["true", "false"] },
+    { key: "homepage_show_categories", label: "Показувати блок категорій на головній", type: "select", default: "true", options: ["true", "false"] },
     { key: "homepage_categories_title", label: "Заголовок категорій", type: "text", default: "Категорії" },
     { key: "homepage_show_products", label: "Показувати товари", type: "select", default: "true", options: ["true", "false"] },
     { key: "homepage_products_title", label: "Заголовок товарів", type: "text", default: "Наші товари" },

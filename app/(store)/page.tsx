@@ -119,8 +119,8 @@ export default async function HomePage() {
         </section>
       )}
 
-      {/* Categories — hide if only 1 (products shown directly) */}
-      {showCategories && categories.length > 1 && (
+      {/* Categories block — controlled by admin setting */}
+      {showCategories && categories.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 py-12">
           <h2 className="text-2xl font-bold text-gray-900 mb-6">{hp.homepage_categories_title}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
