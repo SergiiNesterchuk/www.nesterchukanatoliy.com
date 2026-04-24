@@ -119,11 +119,13 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
   }, []);
 
   useEffect(() => {
-    if (selectedCity) {
-      // Use DeliveryCity (city-level Ref) for warehouses — this is what NovaPoshta expects
+    if (!selectedCity) return;
+    // Delay warehouse load to avoid NovaPoshta rate limit after searchSettlements
+    const timer = setTimeout(() => {
       const ref = selectedCity.DeliveryCity || selectedCity.Ref;
       loadWarehouses(ref, warehouseFilter);
-    }
+    }, 800);
+    return () => clearTimeout(timer);
   }, [selectedCity, warehouseFilter, loadWarehouses]);
 
   const selectCity = (s: Settlement) => {

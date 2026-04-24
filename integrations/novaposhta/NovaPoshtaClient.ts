@@ -155,8 +155,8 @@ export class NovaPoshtaService {
   }
 
   /**
-   * Get warehouses for a city/settlement.
-   * Uses SettlementRef (from searchSettlements Ref field).
+   * Get warehouses for a city.
+   * Uses CityRef (= DeliveryCity from searchSettlements) — single request, no fallback.
    */
   static async getWarehouses(
     cityRef: string,
@@ -168,30 +168,17 @@ export class NovaPoshtaService {
     const cached = getCached<NovaPoshtaWarehouse[]>(cacheKey);
     if (cached) return cached;
 
-    // Try with SettlementRef first (more precise), fallback to CityRef
     const props: Record<string, unknown> = {
-      SettlementRef: cityRef,
+      CityRef: cityRef,
     };
 
     if (type === "postomat") {
       props.TypeOfWarehouseRef = "f9316480-5f2d-425d-bc2c-ac7cd29decf0";
     } else if (type === "branch") {
-      props.TypeOfWarehouseRef = "841339c7-591a-42e2-8233-7a0a00f0ed6f"; // Branch
+      props.TypeOfWarehouseRef = "841339c7-591a-42e2-8233-7a0a00f0ed6f";
     }
 
-    let rawData = await apiRequest("Address", "getWarehouses", props);
-
-    // If SettlementRef returned nothing, try CityRef
-    if (Array.isArray(rawData) && rawData.length === 0) {
-      logger.info("No warehouses with SettlementRef, trying CityRef", { cityRef });
-      const fallbackProps: Record<string, unknown> = { CityRef: cityRef };
-      if (type === "postomat") {
-        fallbackProps.TypeOfWarehouseRef = "f9316480-5f2d-425d-bc2c-ac7cd29decf0";
-      } else if (type === "branch") {
-        fallbackProps.TypeOfWarehouseRef = "841339c7-591a-42e2-8233-7a0a00f0ed6f";
-      }
-      rawData = await apiRequest("Address", "getWarehouses", fallbackProps);
-    }
+    const rawData = await apiRequest("Address", "getWarehouses", props);
 
     const warehouseData = (Array.isArray(rawData) ? rawData : []) as Record<string, string>[];
 
