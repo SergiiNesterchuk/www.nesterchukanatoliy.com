@@ -1,479 +1,406 @@
-# Cloud.md — Deploy, Infrastructure & Integration Guide
+# Cloud.md — Infrastructure, Integrations & Maintenance Guide
+
+> Правило: кожна зміна, яка додає нову Railway variable, інтеграцію, endpoint, payment method, cron або змінює production flow, **повинна одночасно оновлювати Cloud.md**. Якщо Cloud.md не оновлено — задача незавершена.
+
+---
 
 ## 1. Project Overview
 
-E-commerce store for Anatoliy Nesterchuk — natural apple cider vinegar and Bordeaux mixture.
+E-commerce store for Anatoliy Nesterchuk — apple cider vinegar and Bordeaux mixture.
 
-**Stack:** Next.js 16 (App Router) + TypeScript + Tailwind CSS 4 + Prisma 7 + PostgreSQL + Railway
+**Stack:** Next.js 16 + TypeScript + Tailwind CSS + Prisma 7 + PostgreSQL + Railway
 
-**Architecture:**
-- **Storefront** (this repo) — product catalog, cart, checkout, static pages, admin panel
-- **KeyCRM** — order processing, buyer management (external SaaS, sync via API)
-- **WayForPay** — payment processing (external, webhook-based)
+**Integrations:**
+- **KeyCRM** — order management, buyer, payment sync, status sync
+- **WayForPay** — online card payments (Visa/Mastercard)
+- **Nova Poshta** — delivery service (city/warehouse search)
+- **Cloudflare R2** — product image storage (S3-compatible)
 
 **Repo:** https://github.com/SergiiNesterchuk/www.nesterchukanatoliy.com
 
 ---
 
-## 2. Production URLs
-
-| Endpoint | URL |
-|----------|-----|
-| Site | https://wwwnesterchukanatoliycom-production.up.railway.app |
-| Admin | https://wwwnesterchukanatoliycom-production.up.railway.app/admin/login |
-| API | https://wwwnesterchukanatoliycom-production.up.railway.app/api/ |
-| Sitemap | https://wwwnesterchukanatoliycom-production.up.railway.app/api/sitemap.xml |
-
----
-
-## 3. Environment Variables
-
-### Required — site won't work without these
-
-| Variable | Example | Description |
-|----------|---------|-------------|
-| `DATABASE_URL` | `postgresql://postgres:PASS@host:port/railway` | Full PostgreSQL connection string. **Must include user, password, host, port, dbname.** Without it: all DB-backed pages return 500. |
-| `NEXT_PUBLIC_SITE_URL` | `https://wwwnesterchukanatoliycom-production.up.railway.app` | Public site URL. Used for canonical URLs, OG tags, sitemap, payment callbacks. Without it: SEO broken, payment redirects fail. |
-| `ADMIN_JWT_SECRET` | `a3f8c9...` (64+ chars) | Secret for admin auth cookie signing. Generate: `openssl rand -hex 32`. Without it: admin login won't work. |
-
-### Optional — features degrade gracefully without them
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ADMIN_LOGIN` | — | Admin display login (informational) |
-| `ADMIN_PASSWORD` | — | Admin display password (informational) |
-| `KEYCRM_API_KEY` | — | KeyCRM API bearer token. Without it: orders created locally but not synced to CRM. |
-| `KEYCRM_BASE_URL` | `https://openapi.keycrm.app/v1` | KeyCRM API endpoint. |
-| `KEYCRM_SOURCE_ID` | `1` | Source ID in KeyCRM for orders from this site. |
-| `CRM_SYNC_ENABLED` | `true` | Set `false` to disable all KeyCRM sync. Orders stay local only. |
-| `PAYMENTS_ENABLED` | `true` | Set `false` to disable payment processing. Checkout will skip payment step. |
-| `WAYFORPAY_MERCHANT_ACCOUNT` | — | WayForPay merchant ID. Without it: card payments won't work. |
-| `WAYFORPAY_MERCHANT_SECRET` | — | WayForPay HMAC secret for signature verification. |
-| `WAYFORPAY_MERCHANT_DOMAIN` | — | Domain registered with WayForPay (e.g. `nesterchukanatoliy.com`). |
-| `NOVAPOSHTA_API_KEY` | — | Nova Poshta API key for branch search (future). |
-| `CRM_SYNC_ENABLED` | `true` | Set `false` to disable KeyCRM sync. Orders stay local only. |
-| `PAYMENTS_ENABLED` | `true` | Set `false` to disable WayForPay. Checkout skips payment. |
-
----
-
-## 4. Railway Setup
-
-### Project structure
+## 2. Railway Services
 
 ```
 Railway Project: beautiful-forgiveness
-├── www.nesterchukanatoliy.com   (web service — Docker, this repo)
-└── PostgreSQL                    (database service — managed by Railway)
+├── www.nesterchukanatoliy.com   (web service — Docker)
+├── PostgreSQL                    (database — managed)
+└── keycrm-status-cron           (future — cron for status sync)
 ```
 
-### DATABASE_URL configuration
+| Service | Purpose | Variables |
+|---------|---------|-----------|
+| **Web service** | Site, admin, API, checkout, webhooks | All app variables (see §3) |
+| **PostgreSQL** | Database | DATABASE_URL (auto-generated) |
+| **Cron service** | KeyCRM status sync (every 10-15 min) | CRON_SECRET, SITE_URL |
 
-**Critical:** the web service `DATABASE_URL` must be the **full** PostgreSQL connection string, not just `host:port`.
-
-Correct:
+**DATABASE_URL** must be the **full** connection string in web service:
 ```
-postgresql://postgres:OKhXdXRHnsSJKPTqTysqvOcZhESfPZGq@shortline.proxy.rlwy.net:53510/railway
+postgresql://postgres:PASSWORD@host:port/railway
 ```
-
-Wrong:
-```
-shortline.proxy.rlwy.net:53510
-```
-
-**How to set correctly:**
-1. Open PostgreSQL service → Variables → copy `DATABASE_PUBLIC_URL`
-2. Open web service → Variables → set `DATABASE_URL` = copied value
-
-Or use Railway variable reference: `${{Postgres.DATABASE_PUBLIC_URL}}`
-
-### Where to find Variables
-
-Railway Dashboard → Project → Service → Variables tab
+Not just `host:port`. Use Railway variable reference `${{Postgres.DATABASE_PUBLIC_URL}}` or copy from Postgres service.
 
 ---
 
-## 5. Deploy Configuration
+## 3. Environment Variables Reference
 
-### Dockerfile-based build (current)
+### Required (site won't work without)
 
-The project uses a multi-stage `Dockerfile`. Railway detects it automatically.
+| Variable | Service | Purpose | Example | When to change |
+|----------|---------|---------|---------|----------------|
+| `DATABASE_URL` | web | PostgreSQL connection | `postgresql://postgres:xxx@host:5432/railway` | Change DB |
+| `SITE_URL` | web | Server-side public URL (runtime) | `https://wwwnesterchukanatoliycom-production.up.railway.app` | Change domain |
+| `ADMIN_JWT_SECRET` | web | Admin auth cookie signing | `openssl rand -hex 32` | Rotate security. **Logs out all admins.** |
 
-### Effective pipeline
+### KeyCRM
 
-| Stage | Command | Notes |
-|-------|---------|-------|
-| **Install** | `npm ci` | Runs `postinstall` → `prisma generate` |
-| **Build** | `npm run build` | Next.js production build |
-| **Start** | `./start.sh` | Runs `prisma db push` then `npm run start` |
+| Variable | Purpose | When to change |
+|----------|---------|----------------|
+| `KEYCRM_API_KEY` | API bearer token | Change KeyCRM account/key |
+| `KEYCRM_BASE_URL` | API endpoint (default: `https://openapi.keycrm.app/v1`) | Never (unless KeyCRM changes API) |
+| `KEYCRM_SOURCE_ID` | Source ID for orders (default: `1`) | Change sales channel in KeyCRM |
+| `KEYCRM_NOVA_POSHTA_SERVICE_ID` | Nova Poshta delivery service ID in KeyCRM | `4` (check KeyCRM → Settings → Delivery) |
 
-### start.sh behavior
+### WayForPay
 
-On every container start:
-1. If `DATABASE_URL` is set → runs `npx prisma db push` (applies schema, idempotent)
-2. Starts Next.js server on `PORT` (set by Railway automatically)
+| Variable | Purpose | When to change | Risk if wrong |
+|----------|---------|----------------|---------------|
+| `WAYFORPAY_MERCHANT_ACCOUNT` | Merchant ID | Change ФОП/merchant | Payments fail |
+| `WAYFORPAY_MERCHANT_SECRET` | HMAC signing secret | Change merchant | Signature invalid, payments fail |
+| `WAYFORPAY_MERCHANT_DOMAIN` | Domain for redirects | Change domain | Redirect to wrong host after payment |
 
-### What NOT to do in build
+### Nova Poshta
 
-- Do not run `seed` in build/start — it's a one-time manual operation
-- Do not run `prisma migrate dev` in production — use `db push` or `migrate deploy`
-- Do not put `DATABASE_URL` in Dockerfile — it's a runtime env var
+| Variable | Purpose | When to change |
+|----------|---------|----------------|
+| `NOVAPOSHTA_API_KEY` | API key for city/warehouse search | Change NP account/sender |
+
+### Cloudflare R2 (Image Storage)
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `S3_ENDPOINT` | R2 API endpoint (origin only, no path) | `https://ACCOUNT_ID.r2.cloudflarestorage.com` |
+| `S3_ACCESS_KEY` | R2 access key | From R2 API Tokens |
+| `S3_SECRET_KEY` | R2 secret key | From R2 API Tokens |
+| `S3_BUCKET` | Bucket name | `nesterchukanatoliy` |
+| `S3_REGION` | Region | `auto` |
+| `S3_PUBLIC_URL` | Public bucket URL | `https://pub-XXXXX.r2.dev` |
+
+**Important:** `S3_ENDPOINT` must be only the origin — do NOT append bucket name.
+
+### Cron
+
+| Variable | Purpose |
+|----------|---------|
+| `CRON_SECRET` | Auth for `/api/cron/*` endpoints. **Do NOT use ADMIN_JWT_SECRET.** |
+
+### Feature Flags
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `PAYMENTS_ENABLED` | `true` | `false` → skip WayForPay, orders created as unpaid |
+| `CRM_SYNC_ENABLED` | `true` | `false` → no KeyCRM API calls |
+| `EMAIL_ENABLED` | `false` | Future: enable email notifications |
+
+### Future Email
+
+| Variable | Purpose |
+|----------|---------|
+| `EMAIL_ENABLED` | `true` to enable |
+| `EMAIL_FROM` | Sender address |
+| `RESEND_API_KEY` | Resend.com API key |
 
 ---
 
-## 6. Database
+## 4. How to Change WayForPay Merchant
 
-### Engine
+1. Get new credentials from WayForPay dashboard → Merchant settings
+2. In Railway → web service → Variables:
+   ```
+   WAYFORPAY_MERCHANT_ACCOUNT=new_merchant_account
+   WAYFORPAY_MERCHANT_SECRET=new_secret_key
+   WAYFORPAY_MERCHANT_DOMAIN=your-domain.com
+   ```
+3. Redeploy web service
+4. Test: make a small order → pay → verify success page works
+5. Verify in KeyCRM: payment synced correctly
+6. **Warning:** Old transaction IDs belong to old merchant — don't mix
 
-PostgreSQL, managed by Railway. Connected via `pg` driver + `@prisma/adapter-pg`.
+---
 
-### Schema location
+## 5. How to Change Nova Poshta Account
 
+1. Get new API key from https://new.novaposhta.ua → Settings → Security → API keys
+2. In Railway → web service → Variables:
+   ```
+   NOVAPOSHTA_API_KEY=new_key
+   ```
+3. Redeploy
+4. Test: checkout → search "Бровари" → warehouses load
+5. If future TTN creation added: also update sender/counterparty refs
+
+---
+
+## 6. How to Change KeyCRM Account
+
+1. Get new API key from KeyCRM → Settings → API
+2. In Railway → web service → Variables:
+   ```
+   KEYCRM_API_KEY=new_key
+   KEYCRM_SOURCE_ID=1  (check your KeyCRM sources)
+   ```
+3. Redeploy
+4. Test: create order → verify it appears in KeyCRM
+5. If status/payment/delivery mappings changed → update code mappings
+
+---
+
+## 7. Payment Methods
+
+**Admin:** `/admin/payment-methods`
+
+| Method | Key | Online | Description |
+|--------|-----|--------|-------------|
+| Card (WayForPay) | `card_wayforpay` | Yes | Redirect to WayForPay → callback → paid |
+| Cash on Delivery | `cod_cash_on_delivery` | No | Order created as unpaid, sync to KeyCRM immediately |
+
+**How to enable COD:** Admin → Оплата → `cod_cash_on_delivery` → toggle Увімкнено → Save
+
+**Payment statuses:**
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Waiting for online payment |
+| `cod_pending` | Cash on delivery — will be paid at pickup |
+| `paid` | Payment confirmed via WayForPay callback |
+| `failed` | Payment declined/failed |
+| `refunded` | Payment refunded/reversed |
+
+**Critical:** COD orders must NOT create WayForPay invoice. Guard clause in `createPaymentForOrder()`.
+
+---
+
+## 8. Order Status / Customer Lookup
+
+**URL:** `/order-status`
+
+- User enters order number + phone
+- Ownership verified via normalized phone match
+- Shows: status, payment, delivery, tracking, items, total, history
+- Does NOT show: crm_sync_status, KeyCRM IDs, integration logs
+- User cannot cancel/edit orders
+- Recent orders saved in browser localStorage (up to 10)
+
+**Footer link:** "Статус замовлення"
+
+---
+
+## 9. KeyCRM Status Sync / Cron
+
+### Why cron?
+KeyCRM is source of truth for order processing. When manager changes status in KeyCRM (e.g. "Відправлено"), local site needs to know.
+
+### Endpoint
 ```
-prisma/schema.prisma
+POST /api/cron/keycrm-status-sync?secret=CRON_SECRET
 ```
 
-### Key tables
+### What it does
+- Fetches orders with `keycrmOrderId` that are NOT in final status
+- For each: `GET /order/{id}` from KeyCRM → updates local status
+- Maps KeyCRM status names → local statuses (see `shared/order-statuses.ts`)
+- Updates tracking number if available
+- Records changes in OrderStatusHistory
 
-| Table | Purpose |
-|-------|---------|
-| `Category` | Product categories (2 in seed) |
-| `Product` | Products with price in kopiyky (4 in seed) |
-| `ProductImage` | Product photo gallery |
-| `Order` | Customer orders with delivery/payment info |
-| `OrderItem` | Line items (snapshot of product at order time) |
-| `PaymentEvent` | Payment webhook log (success/failure/refund) |
-| `IntegrationLog` | All external API calls (KeyCRM, WayForPay) |
-| `Page` | CMS-managed static pages |
-| `Banner` | Homepage banners |
-| `Settings` | Key-value site settings |
-| `AdminUser` | Admin panel users |
-| `Redirect` | 301 redirect rules for SEO migration |
-| `SyncJob` | Pending CRM sync queue |
+### Final statuses (not synced)
+`completed`, `cancelled`, `returned`
 
-### Database commands
+### Setup Railway cron service
+1. Create new Railway service in same project
+2. Set cron schedule: `*/15 * * * *` (every 15 minutes)
+3. Command: `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"`
+4. Variables: `CRON_SECRET`, `SITE_URL`
 
+**Do NOT use ADMIN_JWT_SECRET as cron secret.**
+
+---
+
+## 10. Cloudflare R2 Image Storage
+
+### Why not local filesystem?
+Railway uses ephemeral containers. Files in `/public/uploads/` are **lost on every redeploy**.
+
+### How it works
+```
+Admin upload → API route → Buffer → S3 PutObject → R2 → Public URL → DB
+Frontend: <img src="https://pub-XXX.r2.dev/products/uuid.jpg">
+```
+
+### Setup
+1. Cloudflare → R2 → Create bucket → Enable public access
+2. Create API token with Object Read & Write
+3. Set Railway variables (see §3)
+
+### Troubleshooting
+- **Images not showing:** Check `S3_PUBLIC_URL` matches actual bucket public URL
+- **Upload fails:** Check `S3_ENDPOINT` is origin only (no `/bucket-name` suffix)
+- **404 on image:** Check R2 public access is enabled for bucket
+- **Images lost after deploy:** They're still in R2. Check DB has correct URLs, not `/api/uploads/`
+
+---
+
+## 11. Database & Data Safety
+
+**All data lives in Railway PostgreSQL.** GitHub stores code only.
+
+### Never run in production
+- `prisma migrate reset`
+- `prisma db push --force-reset`
+- `DELETE FROM ...` or `TRUNCATE` on orders/customers/settings
+- Destructive seed that overwrites admin-changed settings
+
+### Safe seed
 ```bash
-# Apply schema to database (safe, idempotent)
-DATABASE_URL="..." npx prisma db push
-
-# Apply migrations (when migration files exist)
-DATABASE_URL="..." npx prisma migrate deploy
-
-# Open visual DB browser
-DATABASE_URL="..." npx prisma studio
-
-# Generate Prisma client (after schema changes)
-npx prisma generate
-```
-
-**Note:** Prisma 7 requires `--url` flag or `datasource.url` in `prisma.config.ts` for CLI commands. The env var `DATABASE_URL` is read by `prisma.config.ts` at runtime.
-
----
-
-## 7. Seed Data
-
-### How to run
-
-From local machine with Railway CLI:
-```bash
-railway link          # select project, environment, web service
 railway run npx tsx prisma/seed.ts
 ```
+Seed uses `upsert` — creates if missing, doesn't overwrite existing data.
 
-Or with explicit DATABASE_URL:
+### Backup before changes
 ```bash
-DATABASE_URL="postgresql://postgres:PASS@host:port/railway" npx tsx prisma/seed.ts
-```
-
-### What seed creates
-
-- **2 categories:** Бордоська суміш, Яблучний оцет
-- **4 products:** SKU 01-04, with prices, descriptions, stock quantities
-- **4 pages:** Про нас, Оплата і доставка, Контакти, Умови використання
-- **6 settings:** site_name, description, phone, email, GA4 ID, Clarity ID
-- **1 admin user:** `admin@nesterchukanatoliy.com` / `admin123`
-
-### Admin credentials
-
-```
-URL:      /admin/login
-Email:    admin@nesterchukanatoliy.com
-Password: admin123
-```
-
-**Change password in production** — currently stored as SHA-256 hash.
-
----
-
-## 8. KeyCRM Integration
-
-### Flow
-
-```
-Checkout → Local Order created → Payment processed → KeyCRM sync triggered
-```
-
-1. Order always saved locally first (never lost)
-2. After payment success → `KeyCRMService.createOrder()` called
-3. If KeyCRM unavailable → order marked `keycrmSyncStatus: "pending"`
-4. Retry mechanism: `POST /api/revalidate?action=sync&secret=ADMIN_JWT_SECRET`
-
-### Sync statuses
-
-| Status | Meaning |
-|--------|---------|
-| `pending` | Waiting to sync |
-| `synced` | Successfully sent to KeyCRM |
-| `failed` | Sync failed, will retry (up to 5 attempts) |
-
-### Feature flag
-
-```
-CRM_SYNC_ENABLED=false
-```
-
-When disabled: orders are created locally, no KeyCRM API calls made. All checkout and payment still works.
-
-### Code location
-
-```
-integrations/keycrm/KeyCRMClient.ts    — HTTP client with logging
-integrations/keycrm/KeyCRMMapper.ts    — local order → KeyCRM format
-services/KeyCRMService.ts              — business logic, retry, sync
+railway run pg_dump $DATABASE_URL > backup.sql
 ```
 
 ---
 
-## 9. Payment Flow
-
-### Flow
+## 12. Deploy Flow
 
 ```
-Checkout form → POST /api/checkout → Order created → Payment session created
-→ User pays on WayForPay → Webhook POST /api/payment/callback
-→ Signature verified → PaymentEvent recorded → Order status updated → KeyCRM sync
+git push main
+    ↓
+Railway detects push → Docker build
+    ↓
+[Dockerfile] npm ci → prisma generate → next build
+    ↓
+Container starts → start.sh
+    ↓
+prisma db push (apply schema, idempotent)
+    ↓
+npm run start (Next.js on $PORT)
 ```
 
-### Payment states
-
-| Status | Meaning |
-|--------|---------|
-| `pending` | Order created, waiting for payment |
-| `paid` | Payment confirmed via webhook |
-| `failed` | Payment failed or declined |
-
-### Feature flag
-
-```
-PAYMENTS_ENABLED=false
-```
-
-When disabled: checkout skips payment step, order created with `paymentStatus: "pending"`.
-
-### Code location
-
-```
-integrations/payment/PaymentProviderInterface.ts   — abstract interface
-integrations/payment/WayForPayAdapter.ts           — WayForPay implementation
-integrations/payment/PaymentProviderFactory.ts     — provider selection
-services/OrderService.ts                           — orchestration
-app/api/payment/callback/route.ts                  — webhook handler
-```
+**After changing env variables:** Redeploy required for changes to take effect.
 
 ---
 
-## 10. Debug & Troubleshooting
+## 13. Troubleshooting
 
-### 500 on `/` (homepage)
-
+### 500 on homepage
 ```
-Cause:  DATABASE_URL missing, malformed, or DB has no tables
-Fix:    1. Check DATABASE_URL is full connection string in Railway Variables
-        2. Redeploy (start.sh runs db push automatically)
-        3. If tables exist but empty → run seed
-```
-
-### No products or categories visible
-
-```
-Cause:  Seed not executed
-Fix:    railway run npx tsx prisma/seed.ts
-        or: DATABASE_URL="..." npx tsx prisma/seed.ts
+Cause: DATABASE_URL missing or malformed
+Fix:   Check full connection string in Railway Variables
 ```
 
 ### Admin login doesn't work
-
 ```
-Cause:  ADMIN_JWT_SECRET not set, or seed not run (no admin user in DB)
-Fix:    1. Set ADMIN_JWT_SECRET in Railway Variables
-        2. Run seed if admin user doesn't exist
-        3. Redeploy
+Cause: ADMIN_JWT_SECRET not set, or seed not run
+Fix:   Set secret, run seed, redeploy
 ```
 
-### Checkout fails / payment error
-
+### Images disappeared
 ```
-Cause:  WAYFORPAY_* variables not set
-Fix:    Set WAYFORPAY_MERCHANT_ACCOUNT, SECRET, DOMAIN
-        or: set PAYMENTS_ENABLED=false to skip payments
+Cause: Old images were on local filesystem (lost on redeploy)
+Fix:   Re-upload via admin. New images go to R2 (persistent)
 ```
 
-### KeyCRM sync errors
-
+### WayForPay redirect has %20 or goes to localhost
 ```
-Cause:  KEYCRM_API_KEY invalid or KeyCRM API down
-Fix:    1. Check /admin/integration-logs for detailed error
-        2. Fix API key in Railway Variables
-        3. Trigger retry: POST /api/revalidate?action=sync&secret=ADMIN_JWT_SECRET
-        or: set CRM_SYNC_ENABLED=false to disable
+Cause: SITE_URL has trailing space, or WAYFORPAY_MERCHANT_DOMAIN wrong
+Fix:   Trim SITE_URL, set correct domain, redeploy
 ```
 
-### Railway build fails
-
+### COD creates WayForPay invoice
 ```
-Cause:  Usually .env files leaking into build context
-Fix:    .dockerignore must exclude .env*
-        Dockerfile must not reference DATABASE_URL at build time
-```
-
----
-
-## 11. Local Development
-
-### Prerequisites
-
-- Node.js 20+
-- PostgreSQL (local or Docker)
-
-### Setup
-
-```bash
-git clone https://github.com/SergiiNesterchuk/www.nesterchukanatoliy.com.git
-cd www.nesterchukanatoliy.com
-npm install
+Cause: Guard clause missing or paymentMethod key mismatch
+Fix:   Verify cod_cash_on_delivery exists in PaymentMethod table
+       Run seed if needed
 ```
 
-### Local PostgreSQL via Docker
-
-```bash
-docker run -d \
-  --name nesterchukanatoliy-db \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -e POSTGRES_DB=nesterchukanatoliy \
-  -p 5432:5432 \
-  postgres:16-alpine
+### KeyCRM doesn't receive delivery address
+```
+Cause: Missing KEYCRM_NOVA_POSHTA_SERVICE_ID
+Fix:   Set to Nova Poshta service ID from KeyCRM settings (e.g. 4)
 ```
 
-### .env.local
-
-```env
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/nesterchukanatoliy"
-NEXT_PUBLIC_SITE_URL="http://localhost:3000"
-ADMIN_JWT_SECRET="dev-secret-change-in-production"
+### Nova Poshta cities/warehouses don't load
+```
+Cause: NOVAPOSHTA_API_KEY not set or invalid
+Fix:   Set correct API key, redeploy
 ```
 
-### Run
+### Payment refund only writes comment in KeyCRM
+```
+Cause: keycrmPaymentId not saved (old orders before fix)
+Fix:   New orders save keycrmPaymentId after sync.
+       For old orders: manual payment cancellation in KeyCRM
+```
 
-```bash
-npx prisma db push        # create tables
-npx tsx prisma/seed.ts    # seed data
-npm run dev               # start dev server at localhost:3000
+### Cron not updating statuses
+```
+Cause: CRON_SECRET wrong, or KeyCRM API key expired
+Fix:   Check cron service logs, verify secrets match
 ```
 
 ---
 
-## 12. Deployment Flow
+## 14. Future Email Setup
 
+**Provider:** Resend (https://resend.com)
+
+**Variables to add:**
 ```
-Developer pushes to main
-        ↓
-Railway detects push, starts Docker build
-        ↓
-[Dockerfile] npm ci → prisma generate → next build
-        ↓
-Container starts → start.sh
-        ↓
-prisma db push (apply schema changes, idempotent)
-        ↓
-npm run start (Next.js production server on $PORT)
+EMAIL_ENABLED=true
+EMAIL_FROM=orders@nesterchukanatoliy.com
+RESEND_API_KEY=re_xxxxx
 ```
 
-### Manual redeploy
+**Planned emails:**
+- Order created (order number, items, delivery, status link)
+- Payment received
+- Order shipped (tracking number)
+- Order cancelled/refunded
 
-Railway Dashboard → web service → Deployments → Redeploy
-
-### Manual sync trigger
-
-```bash
-curl -X POST "https://SITE_URL/api/revalidate?action=sync&secret=ADMIN_JWT_SECRET"
-```
+**Important:** Email must never block checkout. If send fails → log error, continue.
 
 ---
 
-## 13. Security Notes
+## 15. Maintenance Checklist
 
-- **Never commit** `.env`, `.env.local`, or any file with credentials
-- **`.env.example`** must never contain real values (use empty strings or placeholders)
-- **`ADMIN_JWT_SECRET`** must be at least 32 random bytes: `openssl rand -hex 32`
-- **WayForPay webhook** verifies HMAC-MD5 signature before processing
-- **Admin auth** uses httpOnly secure cookies (not localStorage)
-- **CSRF** protection on all admin mutation endpoints
-- **Rate limiting** should be added for `/api/checkout` and `/api/payment/callback` (not yet implemented)
-- **Production credentials** must be separate from development
-- **Database password** should be rotated periodically via Railway dashboard
-
----
-
-## 14. Admin Panel
-
-### Available sections
-
-| Section | URL | Features |
-|---------|-----|----------|
-| Dashboard | `/admin` | Stats: products, orders, pending sync, failed sync, errors |
-| Products | `/admin/products` | List, create, edit, delete. SKU, price, stock, SEO, gallery |
-| Categories | `/admin/categories` | List, create, edit, delete. Slug, SEO |
-| Orders | `/admin/orders` | List with search, detail view, payment events, CRM sync, retry |
-| Pages | `/admin/pages` | List, create, edit, delete. HTML content, SEO |
-| Redirects | `/admin/redirects` | Add/delete 301/302 redirects |
-| Integration Logs | `/admin/integration-logs` | Health dashboard, recent logs, retry sync action |
-| Settings | `/admin/settings` | Editable key-value pairs |
-
-### Admin API endpoints
-
-All admin APIs require `admin_token` cookie (set on login).
-
-```
-GET/POST     /api/admin/products
-GET/PUT/DEL  /api/admin/products/[id]
-GET/POST     /api/admin/categories
-PUT/DEL      /api/admin/categories/[id]
-GET/POST     /api/admin/pages
-GET/PUT/DEL  /api/admin/pages/[id]
-GET/PUT      /api/admin/settings
-GET/POST     /api/admin/redirects
-DEL          /api/admin/redirects/[id]
-GET          /api/admin/orders
-GET          /api/admin/orders/[id]
-POST         /api/admin/orders/[id]/retry-sync
-POST         /api/admin/upload
-```
+| After... | Do... |
+|----------|-------|
+| Changing any env variable | Redeploy web service |
+| Changing WayForPay merchant | Test payment with small order |
+| Changing Nova Poshta key | Test city/warehouse search in checkout |
+| Changing KeyCRM key | Test order creation → check KeyCRM |
+| Before Prisma migrations | Backup database |
+| After deploy | Run smoke test (see SMOKE_TEST.md) |
+| Adding new env variable | Update Cloud.md |
+| Adding new integration | Update Cloud.md |
+| Adding new payment method | Update Cloud.md §7 |
 
 ---
 
-## 15. Future Improvements
+## 16. Production URLs
 
-| Priority | Task |
-|----------|------|
-| High | Add Nova Poshta API for branch/city search in checkout |
-| High | Email notifications (order confirmation, shipping updates) |
-| Medium | Add user accounts and order history |
-| Medium | Add product search (MeiliSearch or PostgreSQL FTS) |
-| Medium | Rate limiting on checkout and webhook endpoints |
-| Medium | Rich text editor for product descriptions and pages |
-| Low | Image upload to Cloudinary/S3 instead of local `/public` |
-| Low | Add product reviews |
-| Low | Add wishlist/favorites |
-| Low | Add Cloudflare CDN + custom domain |
-| Low | ISR/caching optimization for catalog pages |
+| URL | Purpose |
+|-----|---------|
+| Site | `https://wwwnesterchukanatoliycom-production.up.railway.app` |
+| Admin | `.../admin/login` |
+| Order status | `.../order-status` |
+| Sitemap | `.../api/sitemap.xml` |
+| Payment callback | `.../api/payment/callback` |
+| Payment return | `.../api/payment/return` |
+| KeyCRM webhook | `.../api/keycrm/webhook` |
+| Cron sync | `.../api/cron/keycrm-status-sync?secret=CRON_SECRET` |
+
+**Admin credentials:** `admin@nesterchukanatoliy.com` / `admin123` (change in production!)
