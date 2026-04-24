@@ -1,11 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { AdminForm } from "@/components/admin/AdminForm";
 import { Input } from "@/components/ui/Input";
-import { Button } from "@/components/ui/Button";
-import { Trash2, Upload } from "lucide-react";
+import { Trash2, Upload, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface ProductImage {
   id: string;
@@ -42,20 +40,22 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
   const [uploading, setUploading] = useState(false);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || isNew) return;
+    const files = e.target.files;
+    if (!files || files.length === 0 || isNew) return;
 
     setUploading(true);
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await fetch(`/api/admin/products/${product.id}/images`, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.success) {
-        setImages((prev) => [...prev, data.data]);
+      for (let i = 0; i < files.length; i++) {
+        const formData = new FormData();
+        formData.append("file", files[i]);
+        const res = await fetch(`/api/admin/products/${product.id}/images`, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.success) {
+          setImages((prev) => [...prev, data.data]);
+        }
       }
     } finally {
       setUploading(false);
@@ -75,22 +75,68 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
     }
   };
 
+  const moveImage = async (imageId: string, direction: "left" | "right") => {
+    const idx = images.findIndex((img) => img.id === imageId);
+    if (idx === -1) return;
+    const swapIdx = direction === "left" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= images.length) return;
+
+    const newImages = [...images];
+    [newImages[idx], newImages[swapIdx]] = [newImages[swapIdx], newImages[idx]];
+    setImages(newImages);
+
+    // Persist new order
+    const updates = newImages.map((img, i) => ({ id: img.id, sortOrder: i }));
+    await fetch(`/api/admin/products/${product.id}/images`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ updates }),
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* Images section */}
       {!isNew && (
         <div className="bg-white rounded-xl border p-4">
-          <h3 className="font-semibold mb-3">Фото товару</h3>
+          <h3 className="font-semibold mb-1">Фото товару</h3>
+          <p className="text-xs text-gray-400 mb-3">Перше фото — головне. Стрілками можна змінити порядок.</p>
           <div className="flex flex-wrap gap-3 mb-3">
-            {images.map((img) => (
-              <div key={img.id} className="relative group w-24 h-24 rounded-lg overflow-hidden border">
-                <Image src={img.url} alt={img.alt || ""} fill className="object-cover" sizes="96px" />
-                <button
-                  onClick={() => handleDeleteImage(img.id)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
+            {images.map((img, idx) => (
+              <div key={img.id} className="relative group">
+                <div className={`w-24 h-24 rounded-lg overflow-hidden border-2 ${idx === 0 ? "border-green-500" : "border-gray-200"}`}>
+                  <img src={img.url} alt={img.alt || ""} className="w-full h-full object-cover" />
+                </div>
+                {idx === 0 && (
+                  <span className="absolute -top-2 -left-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-medium">
+                    Головне
+                  </span>
+                )}
+                <div className="absolute bottom-1 left-1 right-1 flex justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => moveImage(img.id, "left")}
+                    disabled={idx === 0}
+                    className="bg-white/90 rounded p-0.5 text-gray-600 hover:text-gray-900 disabled:opacity-30"
+                    title="Перемістити ліворуч"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteImage(img.id)}
+                    className="bg-red-500/90 rounded p-0.5 text-white"
+                    title="Видалити"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => moveImage(img.id, "right")}
+                    disabled={idx === images.length - 1}
+                    className="bg-white/90 rounded p-0.5 text-gray-600 hover:text-gray-900 disabled:opacity-30"
+                    title="Перемістити праворуч"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               </div>
             ))}
             {images.length === 0 && (
@@ -100,7 +146,7 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
           <label className="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 cursor-pointer transition-colors">
             <Upload className="h-4 w-4" />
             {uploading ? "Завантаження..." : "Завантажити фото"}
-            <input type="file" accept="image/*" onChange={handleUpload} className="hidden" disabled={uploading} />
+            <input type="file" accept="image/*" multiple onChange={handleUpload} className="hidden" disabled={uploading} />
           </label>
         </div>
       )}
@@ -117,16 +163,8 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
           <Input id="slug" name="slug" label="Slug *" defaultValue={product.slug} required />
           <Input id="sku" name="sku" label="SKU *" defaultValue={product.sku} required />
           <div>
-            <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-1">
-              Категорія *
-            </label>
-            <select
-              id="categoryId"
-              name="categoryId"
-              defaultValue={product.categoryId}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              required
-            >
+            <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-1">Категорія *</label>
+            <select id="categoryId" name="categoryId" defaultValue={product.categoryId} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" required>
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}

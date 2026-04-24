@@ -1,133 +1,192 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useCartStore } from "@/hooks/useCart";
 import { formatPrice } from "@/shared/money";
+import { normalizePhoneUA, isValidPhoneUA, formatPhoneUA } from "@/shared/phone";
 import { DELIVERY_METHODS, PAYMENT_METHODS } from "@/shared/constants";
+import { Spinner } from "@/components/ui/Spinner";
+import { MapPin, Search } from "lucide-react";
+
+interface Settlement {
+  Ref: string;
+  Description: string;
+  AreaDescription: string;
+  RegionsDescription: string;
+  SettlementTypeDescription: string;
+  DeliveryCity: string;
+}
+
+interface Warehouse {
+  Ref: string;
+  Description: string;
+  ShortAddress: string;
+  Number: string;
+  TypeOfWarehouse: string;
+  CategoryOfWarehouse: string;
+}
+
+const POPULAR_CITIES = [
+  { name: "Київ", query: "Київ" },
+  { name: "Львів", query: "Львів" },
+  { name: "Харків", query: "Харків" },
+  { name: "Одеса", query: "Одеса" },
+  { name: "Дніпро", query: "Дніпро" },
+  { name: "Бровари", query: "Бровари" },
+];
 
 export function CheckoutForm() {
-  const router = useRouter();
   const { items, totalPrice, clearCart } = useCartStore();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
 
-  const [form, setForm] = useState({
-    customerName: "",
-    customerPhone: "",
-    customerEmail: "",
-    deliveryMethod: "nova_poshta_branch",
-    deliveryCity: "",
-    deliveryBranchName: "",
-    deliveryAddress: "",
-    comment: "",
-    agreedToTerms: false,
-  });
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [deliveryMethod, setDeliveryMethod] = useState("nova_poshta_branch");
+  const [comment, setComment] = useState("");
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
-  const updateField = (field: string, value: string | boolean) => {
-    setForm((prev) => ({ ...prev, [field]: value }));
-    setErrors((prev) => ({ ...prev, [field]: "" }));
+  // Nova Poshta
+  const [cityQuery, setCityQuery] = useState("");
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [selectedCity, setSelectedCity] = useState<Settlement | null>(null);
+  const [cityLoading, setCityLoading] = useState(false);
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
+
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouseQuery, setWarehouseQuery] = useState("");
+  const [selectedWarehouse, setSelectedWarehouse] = useState<Warehouse | null>(null);
+  const [warehouseLoading, setWarehouseLoading] = useState(false);
+  const [showWarehouseDropdown, setShowWarehouseDropdown] = useState(false);
+  const [warehouseFilter, setWarehouseFilter] = useState<"all" | "branch" | "postomat">("all");
+  const [courierAddress, setCourierAddress] = useState("");
+
+  // Debounced city search
+  useEffect(() => {
+    if (!cityQuery || cityQuery.length < 2 || selectedCity) return;
+    const timer = setTimeout(async () => {
+      setCityLoading(true);
+      try {
+        const res = await fetch(`/api/novaposhta/settlements?query=${encodeURIComponent(cityQuery)}`);
+        const data = await res.json();
+        if (data.success) { setSettlements(data.data); setShowCityDropdown(true); }
+      } catch { setSettlements([]); }
+      finally { setCityLoading(false); }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [cityQuery, selectedCity]);
+
+  const loadWarehouses = useCallback(async (cityRef: string, type: string = "all") => {
+    setWarehouseLoading(true);
+    try {
+      const res = await fetch(`/api/novaposhta/warehouses?cityRef=${cityRef}&type=${type}`);
+      const data = await res.json();
+      if (data.success) setWarehouses(data.data);
+    } catch { setWarehouses([]); }
+    finally { setWarehouseLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (selectedCity) loadWarehouses(selectedCity.DeliveryCity, warehouseFilter);
+  }, [selectedCity, warehouseFilter, loadWarehouses]);
+
+  const selectCity = (s: Settlement) => {
+    setSelectedCity(s); setCityQuery(s.Description); setShowCityDropdown(false);
+    setSelectedWarehouse(null); setWarehouseQuery(""); setErrors((p) => ({ ...p, city: "" }));
+  };
+
+  const selectPopularCity = async (query: string) => {
+    setCityQuery(query); setCityLoading(true);
+    try {
+      const res = await fetch(`/api/novaposhta/settlements?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (data.success && data.data.length > 0) selectCity(data.data[0]);
+    } finally { setCityLoading(false); }
+  };
+
+  const selectWarehouse = (w: Warehouse) => {
+    setSelectedWarehouse(w); setWarehouseQuery(w.Description); setShowWarehouseDropdown(false);
+    setErrors((p) => ({ ...p, warehouse: "" }));
+  };
+
+  const filteredWarehouses = warehouses.filter((w) =>
+    warehouseQuery.length < 2 || w.Description.toLowerCase().includes(warehouseQuery.toLowerCase()) || w.Number.includes(warehouseQuery)
+  );
+
+  const handlePhoneBlur = () => {
+    if (customerPhone && isValidPhoneUA(customerPhone)) setCustomerPhone(formatPhoneUA(customerPhone));
   };
 
   const validate = (): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    if (!form.customerName.trim() || form.customerName.length < 2)
-      newErrors.customerName = "Вкажіть ім'я (мін. 2 символи)";
-    if (!form.customerPhone.match(/^[\d\s\+\-\(\)]{10,20}$/))
-      newErrors.customerPhone = "Вкажіть коректний номер телефону";
-    if (!form.deliveryCity.trim())
-      newErrors.deliveryCity = "Вкажіть місто";
-    if (form.deliveryMethod === "nova_poshta_branch" && !form.deliveryBranchName.trim())
-      newErrors.deliveryBranchName = "Вкажіть відділення";
-    if (form.deliveryMethod === "nova_poshta_courier" && !form.deliveryAddress.trim())
-      newErrors.deliveryAddress = "Вкажіть адресу";
-    if (!form.agreedToTerms)
-      newErrors.agreedToTerms = "Потрібна згода з умовами";
-    if (items.length === 0)
-      newErrors.items = "Кошик порожній";
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    const e: Record<string, string> = {};
+    if (!customerName.trim() || customerName.length < 2) e.customerName = "Вкажіть ім'я";
+    if (!isValidPhoneUA(customerPhone)) e.customerPhone = "Невірний номер телефону";
+    if (!selectedCity) e.city = "Оберіть місто";
+    if (deliveryMethod === "nova_poshta_branch" && !selectedWarehouse) e.warehouse = "Оберіть відділення";
+    if (deliveryMethod === "nova_poshta_courier" && !courierAddress.trim()) e.courierAddress = "Вкажіть адресу";
+    if (!agreedToTerms) e.agreedToTerms = "Потрібна згода з умовами";
+    if (items.length === 0) e.items = "Кошик порожній";
+    setErrors(e);
+    return Object.keys(e).length === 0;
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (ev: React.FormEvent) => {
+    ev.preventDefault();
     if (!validate() || submitting) return;
-
-    setSubmitting(true);
-    setGeneralError("");
+    setSubmitting(true); setGeneralError("");
 
     try {
       const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...form,
+          customerName: customerName.trim(),
+          customerPhone: normalizePhoneUA(customerPhone),
+          customerEmail: customerEmail.trim() || undefined,
+          deliveryMethod,
+          deliveryCity: selectedCity?.Description || "",
+          deliveryBranchRef: selectedWarehouse?.Ref || undefined,
+          deliveryBranchName: selectedWarehouse?.Description || undefined,
+          deliveryAddress: deliveryMethod === "nova_poshta_courier" ? courierAddress : undefined,
+          comment: comment.trim() || undefined,
           paymentMethod: "card_online",
-          items: items.map((i) => ({
-            productId: i.productId,
-            quantity: i.quantity,
-          })),
+          items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
           idempotencyKey,
           agreedToTerms: true,
         }),
       });
 
       const data = await response.json();
-
-      if (!data.success) {
-        setGeneralError(data.error?.message || "Помилка оформлення замовлення");
-        return;
-      }
+      if (!data.success) { setGeneralError(data.error?.message || "Помилка"); return; }
 
       clearCart();
-
-      // If payment provider returned form fields — redirect to pay page
-      // Using window.location to avoid Next.js App Router form interception
       if (data.data.payment?.formFields) {
-        const paymentData = encodeURIComponent(
-          JSON.stringify({
-            url: data.data.payment.url,
-            fields: data.data.payment.formFields,
-          })
-        );
+        const paymentData = encodeURIComponent(JSON.stringify({ url: data.data.payment.url, fields: data.data.payment.formFields }));
         window.location.href = `/checkout/pay?data=${paymentData}`;
         return;
       }
-
-      // No payment — redirect to success
       window.location.href = `/checkout/success?order=${data.data.orderNumber}`;
-    } catch {
-      setGeneralError("Помилка з'єднання. Спробуйте ще раз.");
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setGeneralError("Помилка з'єднання."); }
+    finally { setSubmitting(false); }
   };
 
   if (items.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-500 text-lg">Кошик порожній</p>
-        <a href="/katalog/" className="mt-4 inline-block text-green-600 hover:underline">
-          Перейти до каталогу
-        </a>
+        <a href="/katalog/" className="mt-4 inline-block text-green-600 hover:underline">Перейти до каталогу</a>
       </div>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
-      {generalError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">
-          {generalError}
-        </div>
-      )}
+      {generalError && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{generalError}</div>}
 
       {/* Order summary */}
       <section>
@@ -135,148 +194,126 @@ export function CheckoutForm() {
         <div className="bg-gray-50 rounded-lg p-4 space-y-2">
           {items.map((item) => (
             <div key={item.productId} className="flex justify-between text-sm">
-              <span>
-                {item.name} &times; {item.quantity}
-              </span>
+              <span>{item.name} &times; {item.quantity}</span>
               <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
             </div>
           ))}
           <div className="border-t pt-2 flex justify-between font-semibold">
-            <span>Разом</span>
-            <span>{formatPrice(totalPrice())}</span>
+            <span>Разом</span><span>{formatPrice(totalPrice())}</span>
           </div>
         </div>
       </section>
 
-      {/* Contact info */}
+      {/* 1. Contact */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Контактні дані</h2>
+        <h2 className="text-lg font-semibold mb-4">1. Контактні дані</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            id="customerName"
-            label="Ім'я та прізвище *"
-            value={form.customerName}
-            onChange={(e) => updateField("customerName", e.target.value)}
-            error={errors.customerName}
-            placeholder="Анатолій Нестерчук"
-          />
-          <Input
-            id="customerPhone"
-            label="Телефон *"
-            type="tel"
-            value={form.customerPhone}
-            onChange={(e) => updateField("customerPhone", e.target.value)}
-            error={errors.customerPhone}
-            placeholder="+380 93 000 3008"
-          />
-          <Input
-            id="customerEmail"
-            label="Email"
-            type="email"
-            value={form.customerEmail}
-            onChange={(e) => updateField("customerEmail", e.target.value)}
-            error={errors.customerEmail}
-            placeholder="email@example.com"
-            className="md:col-span-2"
-          />
+          <Input id="customerName" label="Ім'я та прізвище *" value={customerName} onChange={(e) => { setCustomerName(e.target.value); setErrors((p) => ({ ...p, customerName: "" })); }} error={errors.customerName} placeholder="Анатолій Нестерчук" />
+          <Input id="customerPhone" label="Телефон *" type="tel" value={customerPhone} onChange={(e) => { setCustomerPhone(e.target.value); setErrors((p) => ({ ...p, customerPhone: "" })); }} onBlur={handlePhoneBlur} error={errors.customerPhone} placeholder="+380 99 363 33 00" />
+          <Input id="customerEmail" label="Email" type="email" value={customerEmail} onChange={(e) => setCustomerEmail(e.target.value)} placeholder="email@example.com" className="md:col-span-2" />
         </div>
       </section>
 
-      {/* Delivery */}
+      {/* 2. Delivery */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Доставка</h2>
-        <div className="space-y-3">
+        <h2 className="text-lg font-semibold mb-4">2. Доставка</h2>
+        <div className="space-y-2 mb-4">
           {Object.entries(DELIVERY_METHODS).map(([key, label]) => (
             <label key={key} className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="radio"
-                name="deliveryMethod"
-                value={key}
-                checked={form.deliveryMethod === key}
-                onChange={(e) => updateField("deliveryMethod", e.target.value)}
-                className="text-green-600 focus:ring-green-500"
-              />
+              <input type="radio" name="dm" value={key} checked={deliveryMethod === key} onChange={(e) => setDeliveryMethod(e.target.value)} className="text-green-600" />
               <span className="text-sm">{label}</span>
             </label>
           ))}
         </div>
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input
-            id="deliveryCity"
-            label="Місто *"
-            value={form.deliveryCity}
-            onChange={(e) => updateField("deliveryCity", e.target.value)}
-            error={errors.deliveryCity}
-            placeholder="Бровари"
-          />
-          {form.deliveryMethod === "nova_poshta_branch" && (
-            <Input
-              id="deliveryBranchName"
-              label="Відділення Нової Пошти *"
-              value={form.deliveryBranchName}
-              onChange={(e) => updateField("deliveryBranchName", e.target.value)}
-              error={errors.deliveryBranchName}
-              placeholder="Відділення №1"
-            />
-          )}
-          {form.deliveryMethod === "nova_poshta_courier" && (
-            <Input
-              id="deliveryAddress"
-              label="Адреса доставки *"
-              value={form.deliveryAddress}
-              onChange={(e) => updateField("deliveryAddress", e.target.value)}
-              error={errors.deliveryAddress}
-              placeholder="вул. Симона Петлюри, 16"
-            />
+
+        {/* Popular cities */}
+        <div className="mb-3">
+          <p className="text-xs text-gray-500 mb-2">Популярні міста:</p>
+          <div className="flex flex-wrap gap-2">
+            {POPULAR_CITIES.map((c) => (
+              <button key={c.name} type="button" onClick={() => selectPopularCity(c.query)}
+                className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${selectedCity?.Description?.includes(c.name) ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-700 border-gray-300 hover:border-green-500"}`}>
+                <MapPin className="h-3 w-3 inline mr-1" />{c.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* City search */}
+        <div className="relative mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <input type="text" value={cityQuery}
+              onChange={(e) => { setCityQuery(e.target.value); setSelectedCity(null); setSelectedWarehouse(null); setErrors((p) => ({ ...p, city: "" })); }}
+              onFocus={() => settlements.length > 0 && setShowCityDropdown(true)}
+              placeholder="Пошук міста або села..."
+              className={`w-full pl-10 pr-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-green-200 ${errors.city ? "border-red-300" : "border-gray-300"}`} />
+            {cityLoading && <Spinner className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4" />}
+          </div>
+          {errors.city && <p className="mt-1 text-xs text-red-600">{errors.city}</p>}
+          {showCityDropdown && settlements.length > 0 && (
+            <div className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+              {settlements.map((s) => (
+                <button key={s.Ref} type="button" onClick={() => selectCity(s)} className="w-full text-left px-3 py-2 hover:bg-green-50 text-sm border-b last:border-0">
+                  <span className="font-medium">{s.Description}</span>
+                  <span className="text-gray-400 text-xs ml-2">{s.SettlementTypeDescription}, {s.AreaDescription} обл.</span>
+                </button>
+              ))}
+            </div>
           )}
         </div>
+
+        {/* Warehouse */}
+        {selectedCity && deliveryMethod === "nova_poshta_branch" && (
+          <div className="relative">
+            <div className="flex gap-2 mb-2">
+              {(["all", "branch", "postomat"] as const).map((f) => (
+                <button key={f} type="button" onClick={() => setWarehouseFilter(f)}
+                  className={`px-3 py-1 rounded-full text-xs border ${warehouseFilter === f ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-300"}`}>
+                  {f === "all" ? "Усі" : f === "branch" ? "Відділення" : "Поштомати"}
+                </button>
+              ))}
+            </div>
+            <input type="text" value={warehouseQuery}
+              onChange={(e) => { setWarehouseQuery(e.target.value); setSelectedWarehouse(null); setShowWarehouseDropdown(true); setErrors((p) => ({ ...p, warehouse: "" })); }}
+              onFocus={() => setShowWarehouseDropdown(true)}
+              placeholder={warehouseLoading ? "Завантаження..." : "Пошук відділення..."}
+              className={`w-full px-3 py-2 rounded-lg border text-sm focus:outline-none focus:ring-2 focus:ring-green-200 ${errors.warehouse ? "border-red-300" : "border-gray-300"}`} />
+            {errors.warehouse && <p className="mt-1 text-xs text-red-600">{errors.warehouse}</p>}
+            {showWarehouseDropdown && !warehouseLoading && filteredWarehouses.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full bg-white border rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                {filteredWarehouses.slice(0, 50).map((w) => (
+                  <button key={w.Ref} type="button" onClick={() => selectWarehouse(w)} className="w-full text-left px-3 py-2 hover:bg-green-50 text-sm border-b last:border-0">{w.Description}</button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {selectedCity && deliveryMethod === "nova_poshta_courier" && (
+          <Input id="courierAddress" label="Адреса *" value={courierAddress} onChange={(e) => { setCourierAddress(e.target.value); setErrors((p) => ({ ...p, courierAddress: "" })); }} error={errors.courierAddress} placeholder="вул. Симона Петлюри, 16" />
+        )}
       </section>
 
-      {/* Payment */}
+      {/* 3. Payment */}
       <section>
-        <h2 className="text-lg font-semibold mb-4">Оплата</h2>
-        {Object.entries(PAYMENT_METHODS).map(([key, label]) => (
-          <label key={key} className="flex items-center gap-3 cursor-pointer">
-            <input type="radio" checked readOnly className="text-green-600" />
-            <span className="text-sm">{label}</span>
-          </label>
+        <h2 className="text-lg font-semibold mb-4">3. Оплата</h2>
+        {Object.entries(PAYMENT_METHODS).map(([, label]) => (
+          <label key={label} className="flex items-center gap-3"><input type="radio" checked readOnly className="text-green-600" /><span className="text-sm">{label}</span></label>
         ))}
       </section>
 
-      {/* Comment */}
       <section>
-        <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">
-          Коментар до замовлення
-        </label>
-        <textarea
-          id="comment"
-          value={form.comment}
-          onChange={(e) => updateField("comment", e.target.value)}
-          rows={3}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200 focus:border-green-500"
-          placeholder="Додаткові побажання..."
-        />
+        <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-1">Коментар</label>
+        <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Додаткові побажання..." />
       </section>
 
-      {/* Terms */}
       <div>
         <label className="flex items-start gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.agreedToTerms}
-            onChange={(e) => updateField("agreedToTerms", e.target.checked)}
-            className="mt-0.5 text-green-600 focus:ring-green-500 rounded"
-          />
-          <span className="text-sm text-gray-600">
-            Я погоджуюсь з{" "}
-            <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">
-              умовами використання
-            </a>
-          </span>
+          <input type="checkbox" checked={agreedToTerms} onChange={(e) => { setAgreedToTerms(e.target.checked); setErrors((p) => ({ ...p, agreedToTerms: "" })); }} className="mt-0.5 text-green-600 rounded" />
+          <span className="text-sm text-gray-600">Я погоджуюсь з <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">умовами використання</a></span>
         </label>
-        {errors.agreedToTerms && (
-          <p className="mt-1 text-xs text-red-600">{errors.agreedToTerms}</p>
-        )}
+        {errors.agreedToTerms && <p className="mt-1 text-xs text-red-600">{errors.agreedToTerms}</p>}
       </div>
 
       <Button type="submit" size="lg" loading={submitting} disabled={submitting} className="w-full">

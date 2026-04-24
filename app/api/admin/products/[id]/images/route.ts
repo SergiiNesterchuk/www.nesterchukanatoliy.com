@@ -72,3 +72,30 @@ export const DELETE = adminGuard(async (
     return errorResponse(error);
   }
 });
+
+// Reorder images
+export const PATCH = adminGuard(async (
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    await params; // validate params exist
+    const body = await req.json();
+    const updates = body.updates as Array<{ id: string; sortOrder: number }>;
+
+    if (!updates || !Array.isArray(updates)) {
+      return errorResponse(new Error("updates array required"));
+    }
+
+    for (const { id, sortOrder } of updates) {
+      await prisma.productImage.update({
+        where: { id },
+        data: { sortOrder },
+      });
+    }
+
+    return successResponse({ reordered: true });
+  } catch (error) {
+    return errorResponse(error);
+  }
+});
