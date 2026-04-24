@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { prisma } from "@/shared/db";
 import { adminGuard } from "@/shared/admin-auth";
 import { successResponse, errorResponse } from "@/shared/api-response";
-import { uploadFile } from "@/shared/storage";
+import { uploadFile, deleteFile } from "@/shared/storage";
 
 export const POST = adminGuard(async (
   req: NextRequest,
@@ -55,9 +55,17 @@ export const DELETE = adminGuard(async (
 
     if (!imageId) return errorResponse(new Error("imageId required"));
 
+    // Get image URL before deleting from DB
+    const image = await prisma.productImage.findUnique({ where: { id: imageId } });
+
     await prisma.productImage.delete({
       where: { id: imageId, productId: id },
     });
+
+    // Delete from cloud storage
+    if (image?.url) {
+      await deleteFile(image.url);
+    }
 
     return successResponse({ deleted: true });
   } catch (error) {

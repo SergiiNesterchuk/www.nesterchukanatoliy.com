@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { createLogger } from "./logger";
 import crypto from "crypto";
 
@@ -9,24 +9,43 @@ let s3Client: S3Client | null = null;
 function getS3Client(): S3Client | null {
   if (s3Client) return s3Client;
 
-  const endpoint = process.env.S3_ENDPOINT;
+  const rawEndpoint = process.env.S3_ENDPOINT;
   const accessKey = process.env.S3_ACCESS_KEY;
   const secretKey = process.env.S3_SECRET_KEY;
   const region = process.env.S3_REGION || "auto";
 
-  if (!endpoint || !accessKey || !secretKey) {
+  if (!rawEndpoint || !accessKey || !secretKey) {
     return null;
+  }
+
+  // Strip trailing slashes and any path segments from endpoint
+  // S3_ENDPOINT must be just the origin: https://ACCOUNT.r2.cloudflarestorage.com
+  const endpoint = rawEndpoint.replace(/\/+$/, "").replace(/\/[^/]+$/, (match) => {
+    // Only strip if it looks like a bucket name appended (not part of domain)
+    const url = new URL(rawEndpoint);
+    return url.pathname.length > 1 ? "" : match;
+  });
+
+  // Clean approach: parse and use only origin
+  let cleanEndpoint: string;
+  try {
+    const parsed = new URL(rawEndpoint);
+    cleanEndpoint = parsed.origin;
+  } catch {
+    cleanEndpoint = rawEndpoint.replace(/\/+$/, "");
   }
 
   s3Client = new S3Client({
     region,
-    endpoint,
+    endpoint: cleanEndpoint,
     credentials: {
       accessKeyId: accessKey,
       secretAccessKey: secretKey,
     },
     forcePathStyle: true,
   });
+
+  logger.info("S3 client initialized", { endpoint: cleanEndpoint, region });
 
   return s3Client;
 }
@@ -65,22 +84,23 @@ export async function uploadFile(
 
   const client = getS3Client();
   const bucket = process.env.S3_BUCKET;
-  const publicUrl = process.env.S3_PUBLIC_URL;
+  const publicUrl = process.env.S3_PUBLIC_URL?.replace(/\/+$/, "");
 
   if (!client || !bucket || !publicUrl) {
     throw new Error(
-      "Cloud storage not configured. Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL in environment variables."
+      "Cloud storage not configured. Set S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL."
     );
   }
 
   const uniqueId = crypto.randomUUID();
   const key = `${folder}/${uniqueId}${ext}`;
 
-  // Priority: client-provided MIME → extension lookup → fallback
   const contentType =
     (clientMimeType && clientMimeType.startsWith("image/") ? clientMimeType : null)
     || MIME_MAP[ext]
     || "application/octet-stream";
+
+  logger.info("Uploading file", { bucket, key, contentType, size: buffer.length });
 
   await client.send(
     new PutObjectCommand({
@@ -92,16 +112,46 @@ export async function uploadFile(
     })
   );
 
-  const url = `${publicUrl.replace(/\/+$/, "")}/${key}`;
+  const url = `${publicUrl}/${key}`;
 
-  logger.info("File uploaded", {
-    key,
-    size: buffer.length,
-    contentType,
-    url: url.substring(0, 100),
-  });
+  logger.info("File uploaded", { key, size: buffer.length, url });
 
   return url;
+}
+
+/**
+ * Delete a file from cloud storage by its public URL.
+ */
+export async function deleteFile(fileUrl: string): Promise<void> {
+  const client = getS3Client();
+  const bucket = process.env.S3_BUCKET;
+  const publicUrl = process.env.S3_PUBLIC_URL?.replace(/\/+$/, "");
+
+  if (!client || !bucket || !publicUrl) return;
+
+  // Extract key from public URL
+  if (!fileUrl.startsWith(publicUrl)) {
+    logger.warn("Cannot delete: URL does not match S3_PUBLIC_URL", { fileUrl });
+    return;
+  }
+
+  const key = fileUrl.substring(publicUrl.length + 1); // +1 for the /
+  if (!key) return;
+
+  try {
+    await client.send(
+      new DeleteObjectCommand({
+        Bucket: bucket,
+        Key: key,
+      })
+    );
+    logger.info("File deleted from storage", { key });
+  } catch (error) {
+    logger.warn("Failed to delete file from storage", {
+      key,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 /**
