@@ -84,6 +84,7 @@ export class OrderRepository {
     data: {
       keycrmOrderId?: string;
       keycrmBuyerId?: string;
+      keycrmPaymentId?: string;
       keycrmSyncStatus: string;
       keycrmSyncError?: string | null;
       keycrmSyncRetries?: { increment: number };

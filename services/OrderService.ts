@@ -108,6 +108,12 @@ export class OrderService {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new PaymentError("Замовлення не знайдено");
 
+    // Guard: COD and non-online methods must NOT create WayForPay session
+    if (order.paymentMethod.includes("cod") || order.paymentStatus === "cod_pending") {
+      logger.info("Skipping online payment for COD order", { orderId, paymentMethod: order.paymentMethod });
+      return null;
+    }
+
     const provider = getPaymentProvider("wayforpay");
 
     const session = await provider.createPaymentSession({

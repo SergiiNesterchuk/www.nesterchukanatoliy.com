@@ -75,9 +75,29 @@ export class KeyCRMService {
         orderId
       );
 
+      // Try to get payment ID from KeyCRM order (for future refund sync)
+      let keycrmPaymentId: string | undefined;
+      if (order.paymentStatus === "paid") {
+        try {
+          const fullOrder = await this.client.request<{ payments?: Array<{ id: number }> }>(
+            "GET",
+            `/order/${keycrmOrder.id}?include=payments`,
+            undefined,
+            "order",
+            orderId
+          );
+          if (fullOrder.payments && fullOrder.payments.length > 0) {
+            keycrmPaymentId = String(fullOrder.payments[0].id);
+          }
+        } catch {
+          logger.warn("Could not fetch keycrmPaymentId", { orderId });
+        }
+      }
+
       await OrderRepository.updateKeycrmSync(orderId, {
         keycrmOrderId: String(keycrmOrder.id),
         keycrmBuyerId: String(keycrmOrder.buyer_id),
+        keycrmPaymentId,
         keycrmSyncStatus: "synced",
         keycrmSyncError: null,
       });
@@ -85,6 +105,7 @@ export class KeyCRMService {
       logger.info("Order synced to KeyCRM", {
         orderId,
         keycrmOrderId: keycrmOrder.id,
+        keycrmPaymentId,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -161,8 +182,9 @@ export class KeyCRMService {
     const order = await OrderRepository.findById(orderId);
     if (!order || !order.keycrmOrderId) return;
 
-    // Idempotency: if already synced as refunded, skip
-    if (order.keycrmSyncStatus === "synced" && order.paymentStatus === "refunded") {
+    // Idempotency: if already synced with final refund/failed status, skip
+    if (order.keycrmSyncStatus === "synced" && ["refunded", "cancelled"].includes(order.paymentStatus)) {
+      logger.info("Refund already synced, skipping", { orderId });
       return;
     }
 

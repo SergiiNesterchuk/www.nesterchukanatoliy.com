@@ -58,9 +58,17 @@
 ## Refund/Cancel (WayForPay)
 
 - [ ] Card order paid → WayForPay refund callback → paymentStatus = failed/refunded
-- [ ] KeyCRM отримує коригуючий коментар/payment update
-- [ ] Повторний refund callback не дублює PaymentEvent
+- [ ] KeyCRM financial payment record cancelled (not just comment)
+- [ ] keycrmPaymentId saved after order sync → used for refund
+- [ ] Повторний refund callback не дублює PaymentEvent/фінансову корекцію
 - [ ] COD order НЕ реагує на WayForPay callbacks
+
+## Critical Guards
+
+- [ ] COD order → createPaymentForOrder returns null (no WayForPay call)
+- [ ] COD order → no invoice/paymentUrl created
+- [ ] COD order → WayForPay callback ignored (no matching order with online payment)
+- [ ] Duplicate refund callback → idempotent (synced + refunded = skip)
 
 ## Recent Orders (localStorage)
 
