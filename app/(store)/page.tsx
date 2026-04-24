@@ -28,6 +28,7 @@ async function getHomeConfig() {
     homepage_products_title: "Наші товари",
     homepage_categories_title: "Категорії",
     homepage_show_categories: "true",
+    homepage_show_hero: "true",
     homepage_show_products: "true",
     homepage_show_pages: "false",
     homepage_content_block: "",
@@ -62,39 +63,51 @@ export default async function HomePage() {
   }
 
   const hp = await getHomeConfig();
+  const showHero = hp.homepage_show_hero !== "false";
   const showCategories = hp.homepage_show_categories !== "false";
   const showProducts = hp.homepage_show_products !== "false";
   const showPages = hp.homepage_show_pages !== "false";
   const contentBlock = hp.homepage_content_block ? sanitizeHtml(hp.homepage_content_block) : "";
-  const contentPosition = hp.homepage_content_block_position || "after_hero";
+  let contentPosition = hp.homepage_content_block_position || "after_hero";
+  // If hero is off and content was "after_hero", show it as first block
+  if (!showHero && contentPosition === "after_hero") contentPosition = "top";
 
   return (
     <>
       <JsonLd data={buildWebSiteJsonLd()} />
       <JsonLd data={buildOrganizationJsonLd()} />
 
+      {/* Content block — top position (when hero is off) */}
+      {contentBlock && contentPosition === "top" && (
+        <section className="max-w-7xl mx-auto px-4 py-8">
+          <div className="prose prose-sm md:prose-base max-w-none" dangerouslySetInnerHTML={{ __html: contentBlock }} />
+        </section>
+      )}
+
       {/* Hero */}
-      <section className="bg-gradient-to-br from-green-50 to-green-100">
-        <div className="max-w-7xl mx-auto px-4 py-12 md:py-20">
-          <div className="max-w-2xl">
-            <h1 className="text-3xl md:text-5xl font-bold text-gray-900 leading-tight">
-              {hp.homepage_title}
-              <span className="text-green-600"> {hp.homepage_title_accent}</span>
-            </h1>
-            <p className="mt-4 text-lg text-gray-600 leading-relaxed">
-              {hp.homepage_description}
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href={hp.homepage_cta_link}
-                className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
-              >
-                {hp.homepage_cta_text}
-              </Link>
+      {showHero && (
+        <section className="bg-gradient-to-br from-green-50 to-green-100">
+          <div className="max-w-7xl mx-auto px-4 py-12 md:py-20">
+            <div className="max-w-2xl">
+              <h1 className="text-3xl md:text-5xl font-bold text-gray-900 leading-tight">
+                {hp.homepage_title}
+                <span className="text-green-600"> {hp.homepage_title_accent}</span>
+              </h1>
+              <p className="mt-4 text-lg text-gray-600 leading-relaxed">
+                {hp.homepage_description}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href={hp.homepage_cta_link}
+                  className="inline-flex items-center px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  {hp.homepage_cta_text}
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Content block — after hero */}
       {contentBlock && contentPosition === "after_hero" && (

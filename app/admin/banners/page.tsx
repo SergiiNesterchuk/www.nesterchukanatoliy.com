@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/Input";
 interface Setting { key: string; value: string; }
 
 const SECTIONS = [
-  { title: "Hero секція", items: [
+  { title: "Hero секція", hint: "Вимкніть Hero, якщо хочете, щоб головна одразу починалась із товарів або контентного блоку.", items: [
+    { key: "homepage_show_hero", label: "Показувати Hero section", type: "select", default: "true", options: ["true", "false"] },
     { key: "homepage_title", label: "Заголовок", type: "text", default: "Натуральні продукти" },
     { key: "homepage_title_accent", label: "Акцентний текст", type: "text", default: "власного виробництва" },
     { key: "homepage_description", label: "Опис", type: "textarea", default: "Яблучний оцет без хімії та штучних добавок." },
@@ -92,7 +93,8 @@ export default function AdminBannersPage() {
       <div className="space-y-6">
         {SECTIONS.map((section) => (
           <div key={section.title} className="bg-white rounded-xl border p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">{section.title}</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">{section.title}</h2>
+            {(section as { hint?: string }).hint && <p className="text-xs text-gray-400 mb-4">{(section as { hint?: string }).hint}</p>}
             <div className="space-y-4">
               {section.items.map((item) => {
                 const value = settings[item.key] ?? item.default;
