@@ -28,12 +28,12 @@ interface OrderStatus {
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Нове замовлення", confirmed: "Підтверджено", processing: "В обробці",
-  paid: "Оплачено", shipped: "Відправлено", delivered: "Доставлено",
+  paid: "Оплачено", partial_paid: "Передплата отримана", shipped: "Відправлено", delivered: "Доставлено",
   completed: "Виконано", cancelled: "Скасовано",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
-  pending: "Очікує оплати", paid: "Оплачено", failed: "Помилка оплати", refunded: "Повернено",
+  pending: "Очікує оплати", awaiting_prepayment: "Очікує передплати", partial_paid: "Передплата отримана", cod_pending: "Оплата при отриманні", paid: "Оплачено", failed: "Помилка оплати", prepayment_failed: "Передплата не завершена", refunded: "Повернено",
 };
 
 export default function OrderStatusPage() {

@@ -45,9 +45,12 @@ export const ORDER_STATUSES = {
 
 export const PAYMENT_STATUSES = {
   pending: "Очікує оплати",
+  awaiting_prepayment: "Очікує передплати",
+  partial_paid: "Передплата отримана",
   cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
   failed: "Помилка оплати",
+  prepayment_failed: "Передплата не завершена",
   refunded: "Повернено",
   cancelled: "Скасовано",
 } as const;
@@ -67,6 +70,9 @@ export const DELIVERY_METHODS = {
 export const PAYMENT_METHODS = {
   card_online: "Оплата карткою онлайн",
 } as const;
+
+/** COD prepayment amount in kopiyky. 20000 = 200 UAH */
+export const COD_PREPAYMENT_AMOUNT = 20000;
 
 export const ITEMS_PER_PAGE = 12;
 export const MAX_CART_QUANTITY = 99;

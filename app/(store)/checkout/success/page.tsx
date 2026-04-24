@@ -17,8 +17,8 @@ async function getPageSettings() {
     checkout_success_text: "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження.",
     checkout_failed_title: "Оплата не пройшла",
     checkout_failed_text: "Оплата не була завершена. Ваше замовлення збережено.",
-    checkout_cod_title: "Замовлення створено!",
-    checkout_cod_text: "Дякуємо! Оплата при отриманні на пошті. Ми зв'яжемось для підтвердження.",
+    checkout_cod_title: "Передплату отримано!",
+    checkout_cod_text: "Дякуємо! Передплату отримано. Решту суми ви сплатите при отриманні на пошті. Ми зв'яжемось для підтвердження.",
   };
   try {
     const settings = await prisma.settings.findMany({ where: { key: { startsWith: "checkout_" } } });

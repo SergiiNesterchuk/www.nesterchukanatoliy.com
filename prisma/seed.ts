@@ -318,11 +318,11 @@ async function main() {
     },
     {
       key: "cod_cash_on_delivery",
-      title: "Оплата при отриманні (накладений платіж)",
-      description: "Оплата при отриманні на відділенні Нової Пошти",
-      customerInstruction: "Ви оплатите замовлення при отриманні на пошті.",
+      title: "Накладений платіж з передплатою 200 грн",
+      description: "Передплата 200 грн онлайн, решта — при отриманні у Новій Пошті",
+      customerInstruction: "Оплатіть 200 грн зараз. Решту суми ви сплатите при отриманні на пошті.",
       enabled: false,
-      requiresOnlinePayment: false,
+      requiresOnlinePayment: true,
       sortOrder: 2,
     },
   ];

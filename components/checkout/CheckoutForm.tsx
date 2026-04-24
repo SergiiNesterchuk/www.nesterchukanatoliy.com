@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { useCartStore } from "@/hooks/useCart";
 import { formatPrice } from "@/shared/money";
 import { normalizePhoneUA, isValidPhoneUA, formatPhoneUA } from "@/shared/phone";
-import { DELIVERY_METHODS, PAYMENT_METHODS } from "@/shared/constants";
+import { DELIVERY_METHODS, COD_PREPAYMENT_AMOUNT } from "@/shared/constants";
 import { Spinner } from "@/components/ui/Spinner";
 import { MapPin, Search } from "lucide-react";
 
@@ -401,15 +401,30 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       <section>
         <h2 className="text-lg font-semibold mb-4">3. Оплата</h2>
         <div className="space-y-3">
-          {paymentMethods.map((pm) => (
-            <label key={pm.key} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPaymentMethod === pm.key ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
-              <input type="radio" name="paymentMethod" value={pm.key} checked={selectedPaymentMethod === pm.key} onChange={() => setSelectedPaymentMethod(pm.key)} className="mt-0.5 text-green-600" />
-              <div>
-                <span className="text-sm font-medium">{pm.title}</span>
-                {pm.description && <p className="text-xs text-gray-500 mt-0.5">{pm.description}</p>}
-              </div>
-            </label>
-          ))}
+          {paymentMethods.map((pm) => {
+            const isCod = pm.key.includes("cod");
+            const prepayUAH = COD_PREPAYMENT_AMOUNT / 100;
+            const total = totalPrice();
+            const prepay = isCod ? Math.min(COD_PREPAYMENT_AMOUNT, total) : 0;
+            const remaining = isCod ? total - prepay : 0;
+
+            return (
+              <label key={pm.key} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selectedPaymentMethod === pm.key ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <input type="radio" name="paymentMethod" value={pm.key} checked={selectedPaymentMethod === pm.key} onChange={() => setSelectedPaymentMethod(pm.key)} className="mt-0.5 text-green-600" />
+                <div className="flex-1">
+                  <span className="text-sm font-medium">{pm.title}</span>
+                  {pm.description && <p className="text-xs text-gray-500 mt-0.5">{pm.description}</p>}
+                  {isCod && selectedPaymentMethod === pm.key && total > 0 && (
+                    <div className="mt-2 bg-orange-50 rounded-lg p-2.5 text-xs space-y-1">
+                      <div className="flex justify-between"><span>Сума замовлення:</span><span className="font-medium">{formatPrice(total)}</span></div>
+                      <div className="flex justify-between text-green-700"><span>Передплата зараз:</span><span className="font-medium">{formatPrice(prepay)}</span></div>
+                      {remaining > 0 && <div className="flex justify-between text-orange-700"><span>При отриманні:</span><span className="font-medium">{formatPrice(remaining)}</span></div>}
+                    </div>
+                  )}
+                </div>
+              </label>
+            );
+          })}
         </div>
       </section>
 
@@ -429,7 +444,11 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       )}
 
       <Button type="submit" size="lg" loading={submitting} disabled={submitting} className="w-full">
-        {submitting ? "Оформлення..." : `Оплатити ${formatPrice(totalPrice())}`}
+        {submitting ? "Оформлення..." :
+          selectedPaymentMethod.includes("cod")
+            ? `Оплатити передплату ${formatPrice(Math.min(COD_PREPAYMENT_AMOUNT, totalPrice()))}`
+            : `Оплатити ${formatPrice(totalPrice())}`
+        }
       </Button>
     </form>
   );

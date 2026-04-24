@@ -99,7 +99,12 @@ export class OrderService {
     return order;
   }
 
-  static async createPaymentForOrder(orderId: string) {
+  /**
+   * Create WayForPay payment session.
+   * @param orderId - local order ID
+   * @param overrideAmount - optional: pay this amount instead of order.total (for COD prepayment)
+   */
+  static async createPaymentForOrder(orderId: string, overrideAmount?: number) {
     if (process.env.PAYMENTS_ENABLED === "false") {
       logger.info("Payments disabled, skipping", { orderId });
       return null;
@@ -108,23 +113,27 @@ export class OrderService {
     const order = await OrderRepository.findById(orderId);
     if (!order) throw new PaymentError("Замовлення не знайдено");
 
-    // Guard: COD and non-online methods must NOT create WayForPay session
-    if (order.paymentMethod.includes("cod") || order.paymentStatus === "cod_pending") {
-      logger.info("Skipping online payment for COD order", { orderId, paymentMethod: order.paymentMethod });
-      return null;
-    }
+    const payAmount = overrideAmount || order.total;
+    const isCodPrepayment = !!overrideAmount && overrideAmount < order.total;
+
+    const description = isCodPrepayment
+      ? `Передплата ${payAmount / 100} грн за замовлення ${order.orderNumber}`
+      : `Замовлення ${order.orderNumber}`;
 
     const provider = getPaymentProvider("wayforpay");
 
     const session = await provider.createPaymentSession({
       orderNumber: order.orderNumber,
-      amount: order.total,
+      amount: payAmount,
       currency: order.currency,
-      description: `Замовлення ${order.orderNumber}`,
+      description,
       returnUrl: buildAbsoluteUrl(`/api/payment/return?order=${order.orderNumber}`),
       callbackUrl: buildAbsoluteUrl("/api/payment/callback"),
       customerEmail: order.customerEmail || undefined,
-      items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
+      // For prepayment: single line item with prepayment amount
+      items: isCodPrepayment
+        ? [{ name: `Передплата за замовлення ${order.orderNumber}`, quantity: 1, price: payAmount }]
+        : order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
     });
 
     await IntegrationLogRepository.create({
@@ -186,17 +195,24 @@ export class OrderService {
     });
 
     if (result.success) {
+      // Determine payment status based on payment purpose
+      const isCodPrepayment = order.paymentPurpose === "cod_prepayment" || order.paymentMethod.includes("cod");
+      const newPaymentStatus = isCodPrepayment ? "partial_paid" : "paid";
+      const statusMessage = isCodPrepayment
+        ? `Передплату ${(result.amount / 100).toFixed(0)} грн отримано`
+        : "Оплату отримано";
+
       await OrderRepository.updatePaymentStatus(order.id, {
-        paymentStatus: "paid",
+        paymentStatus: newPaymentStatus,
         paymentProvider: "wayforpay",
         externalPaymentId: result.externalPaymentId,
-        status: "paid",
+        status: isCodPrepayment ? "new" : "paid",
       });
 
       // Status history
       try {
         await prisma.orderStatusHistory.create({
-          data: { orderId: order.id, source: "payment", oldStatus: order.paymentStatus, newStatus: "paid", message: "Оплату отримано" },
+          data: { orderId: order.id, source: "payment", oldStatus: order.paymentStatus, newStatus: newPaymentStatus, message: statusMessage },
         });
       } catch { /* non-critical */ }
 

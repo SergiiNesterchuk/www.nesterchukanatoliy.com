@@ -83,6 +83,8 @@ model Order {
   paymentMethod      String
   paymentStatus      String       @default("pending")
   paymentProvider    String?
+  paymentPurpose     String?      // full_payment, cod_prepayment
+  prepaymentAmount   Int?         // in kopiyky, e.g. 20000 = 200 UAH
   externalPaymentId  String?
   keycrmOrderId      String?
   keycrmBuyerId      String?

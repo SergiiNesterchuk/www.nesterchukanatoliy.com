@@ -15,6 +15,8 @@ interface LocalOrder {
   comment: string | null;
   total: number;
   paymentStatus: string;
+  paymentPurpose: string | null;
+  prepaymentAmount: number | null;
   paymentMethod: string;
   externalPaymentId: string | null;
   utmSource: string | null;
@@ -68,6 +70,14 @@ function buildDeliveryComment(order: LocalOrder): string {
   }
   if (order.deliveryBranchRef) {
     parts.push(`NP Ref: ${order.deliveryBranchRef}`);
+  }
+
+  // Prepayment info
+  if (order.prepaymentAmount && order.prepaymentAmount > 0) {
+    const prepUAH = order.prepaymentAmount / 100;
+    const remainUAH = (order.total - order.prepaymentAmount) / 100;
+    parts.push(`Передплата: ${prepUAH} грн (WayForPay)`);
+    if (remainUAH > 0) parts.push(`Решта при отриманні: ${remainUAH} грн`);
   }
 
   if (order.comment?.trim()) {
@@ -152,8 +162,9 @@ export class KeyCRMMapper {
     // Manager comment with full delivery details for TTN creation
     keycrmOrder.manager_comment = buildDeliveryComment(order);
 
-    // Payment — attach if paid, or describe COD
+    // Payment records for KeyCRM
     if (order.paymentStatus === "paid") {
+      // Full card payment
       keycrmOrder.payments = [
         {
           payment_method: this.mapPaymentMethod(order.paymentMethod),
@@ -164,8 +175,30 @@ export class KeyCRMMapper {
             : "Оплата карткою",
         },
       ];
-    } else if (order.paymentMethod.includes("cod")) {
-      // COD — mark as unpaid cash on delivery
+    } else if (order.paymentStatus === "partial_paid" && order.prepaymentAmount) {
+      // COD with prepayment — 2 payment records
+      const prepaymentUAH = Number(toHryvni(order.prepaymentAmount)) || 0;
+      const remainingUAH = Number(toHryvni(order.total - order.prepaymentAmount)) || 0;
+
+      keycrmOrder.payments = [
+        {
+          payment_method: "WayForPay",
+          amount: prepaymentUAH,
+          status: "paid",
+          description: `Передплата ${prepaymentUAH} грн${order.externalPaymentId ? ` (WayForPay: ${order.externalPaymentId})` : ""}`,
+        },
+      ];
+
+      if (remainingUAH > 0) {
+        keycrmOrder.payments.push({
+          payment_method: "cash_on_delivery",
+          amount: remainingUAH,
+          status: "not_paid",
+          description: `Решта ${remainingUAH} грн при отриманні`,
+        });
+      }
+    } else if (order.paymentMethod.includes("cod") && order.paymentStatus === "cod_pending") {
+      // Legacy COD without prepayment
       keycrmOrder.payments = [
         {
           payment_method: "cash_on_delivery",
