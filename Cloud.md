@@ -511,22 +511,80 @@ Fix:   Check cron service logs, verify secrets match
 
 ## 18. Future Email Setup
 
-**Provider:** Resend (https://resend.com)
+### Provider & Domain
 
-**Variables to add:**
+- **Provider:** Resend (https://resend.com)
+- **Domain:** nesterchukanatoliy.com (verified in Resend)
+- **DNS Provider:** Namecheap
+- **Region:** eu-west-1 (Ireland)
+- **Transport:** HTTPS API (not SMTP)
+
+### DNS Records (Namecheap)
+
+| Type | Host | Purpose |
+|------|------|---------|
+| TXT | `resend._domainkey` | DKIM signature verification |
+| TXT | `@` | SPF: `v=spf1 include:spf.efwd.registrar-servers.com include:amazonses.com ~all` |
+| TXT | `send` | SPF: `v=spf1 include:amazonses.com ~all` |
+| MX | `send` | `feedback-smtp.eu-west-1.amazonses.com` (priority 10) |
+
+**Important:** Only ONE SPF record per host (@). DKIM required or emails go to spam.
+
+### Railway Variables
+
 ```
-EMAIL_ENABLED=true
-EMAIL_FROM=orders@nesterchukanatoliy.com
 RESEND_API_KEY=re_xxxxx
+EMAIL_FROM=orders@nesterchukanatoliy.com
+EMAIL_FROM_NAME=Магазин Анатолія Нестерчука
+EMAIL_REPLY_TO=support@nesterchukanatoliy.com
 ```
 
-**Planned emails:**
-- Order created (order number, items, delivery, status link)
-- Payment received
-- Order shipped (tracking number)
-- Order cancelled/refunded
+### When emails are sent
 
-**Important:** Email must never block checkout. If send fails → log error, continue.
+| Event | Email sent? |
+|-------|------------|
+| Card payment success (paid) | ✅ Order confirmation |
+| COD prepayment success (partial_paid) | ✅ With prepayment + remaining amount |
+| Payment failed/declined | ❌ No email |
+| No email in order | ❌ Skipped (logged as info) |
+| Duplicate callback | ❌ Idempotent: emailSentAt prevents re-send |
+
+### Idempotency
+
+Order has `emailSentAt` field. Email sent only once per order.
+If WayForPay callback fires twice → second email NOT sent.
+
+### How to change email sender
+
+1. Add new domain in Resend dashboard
+2. Configure DNS (DKIM + SPF + MX)
+3. Wait for verification (up to 48h for DNS propagation)
+4. Update `EMAIL_FROM` in Railway Variables
+5. Redeploy
+
+### Test email
+
+```bash
+curl -X POST https://SITE_URL/api/admin/test-email \
+  -H "Content-Type: application/json" \
+  -H "Cookie: admin_token=..." \
+  -d '{"email":"test@example.com"}'
+```
+
+### Common issues
+
+- **Resend "Pending"** → DNS not propagated yet
+- **Emails go to spam** → Missing DKIM or SPF misconfigured
+- **Emails not sending** → Invalid API key or domain not verified
+- **Multiple SPF records on @** → Invalid, merge into one record
+
+### SMS/Viber (future)
+
+NotificationService.sendOrderSmsOrViber() is a no-op placeholder.
+When SMS/Viber provider is chosen, implement there.
+Currently logs "no provider configured" without sending.
+
+**Important:** Email must never block checkout. If send fails → logged in IntegrationLog, order continues.
 
 ---
 

@@ -106,6 +106,8 @@ model Order {
   utmTerm            String?
   utmContent         String?
   source             String       @default("website")
+  emailSentAt        DateTime?
+  smsSentAt          DateTime?
   customerId         String?
   customer           Customer?    @relation(fields: [customerId], references: [id])
   trackingNumber     String?

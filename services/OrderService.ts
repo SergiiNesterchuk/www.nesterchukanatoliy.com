@@ -236,6 +236,18 @@ export class OrderService {
       }
 
       logger.info("Payment successful", { orderId: order.id, orderNumber: order.orderNumber });
+
+      // Send email notification (non-blocking, idempotent)
+      import("@/services/NotificationService").then(({ NotificationService }) => {
+        // Refetch order with updated status and items
+        OrderRepository.findById(order.id).then((updatedOrder) => {
+          if (updatedOrder) {
+            NotificationService.sendOrderConfirmation(updatedOrder).catch((e) => {
+              logger.error("Email notification failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+            });
+          }
+        });
+      });
     } else if (result.status === "failure") {
       // Set appropriate failure status based on payment purpose
       const failStatus = order.paymentPurpose === "cod_prepayment" ? "prepayment_failed" : "failed";
