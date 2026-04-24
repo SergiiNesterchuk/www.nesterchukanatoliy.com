@@ -30,6 +30,16 @@ export default async function AdminIntegrationLogsPage() {
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Моніторинг інтеграцій</h1>
 
+      {/* Resolve all errors */}
+      {stats.recentErrors > 0 && (
+        <form action="/api/admin/integration-logs" method="POST" className="mb-4">
+          <input type="hidden" name="action" value="resolve_all" />
+          <button type="submit" className="px-4 py-2 bg-gray-100 rounded-lg text-sm hover:bg-gray-200 text-gray-700">
+            Позначити всі помилки як вирішені ({stats.recentErrors})
+          </button>
+        </form>
+      )}
+
       {/* Health Dashboard */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <HealthCard label="CRM Sync" ok={crmHealthy} detail={crmHealthy ? "OK" : `${stats.paidNotSynced} не синхронізовано`} />

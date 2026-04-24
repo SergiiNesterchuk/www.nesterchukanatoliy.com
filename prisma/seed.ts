@@ -192,11 +192,11 @@ async function main() {
       create: productData,
     });
 
-    for (const image of images) {
-      const existing = await prisma.productImage.findFirst({
-        where: { productId: product.id, url: image.url },
-      });
-      if (!existing) {
+    // Only add seed images if product has NO images at all
+    // This prevents ghost images on re-seed when R2 images already exist
+    const existingImages = await prisma.productImage.count({ where: { productId: product.id } });
+    if (existingImages === 0) {
+      for (const image of images) {
         await prisma.productImage.create({
           data: { ...image, productId: product.id },
         });

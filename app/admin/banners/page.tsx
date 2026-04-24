@@ -26,6 +26,23 @@ const SECTIONS = [
     { key: "homepage_content_block_position", label: "Позиція блоку", type: "select", default: "after_hero", options: ["after_hero", "after_categories", "after_products"] },
     { key: "homepage_content_block", label: "HTML контент", type: "html", default: "" },
   ]},
+  { title: "Футер", items: [
+    { key: "footer_brand_title", label: "Назва у футері", type: "text", default: "Магазин Анатолія Нестерчука" },
+    { key: "footer_brand_description", label: "Опис у футері", type: "textarea", default: "Натуральний яблучний оцет власного виробництва та засоби для захисту саду." },
+    { key: "footer_show_social", label: "Показувати соцмережі", type: "select", default: "true", options: ["true", "false"] },
+    { key: "footer_show_contacts", label: "Показувати контакти", type: "select", default: "true", options: ["true", "false"] },
+    { key: "footer_show_customer_links", label: "Показувати блок Покупцям", type: "select", default: "true", options: ["true", "false"] },
+    { key: "footer_copyright_text", label: "Текст copyright (порожній = авто)", type: "text", default: "" },
+    { key: "footer_phone", label: "Телефон у футері", type: "text", default: "093-000-3008" },
+    { key: "footer_email", label: "Email у футері", type: "text", default: "marina.onof38@gmail.com" },
+    { key: "footer_address", label: "Адреса у футері", type: "text", default: "м. Бровари, Київська обл." },
+  ]},
+  { title: "Соцмережі", items: [
+    { key: "social_instagram", label: "Instagram URL", type: "text", default: "" },
+    { key: "social_youtube", label: "YouTube URL", type: "text", default: "" },
+    { key: "social_facebook", label: "Facebook URL", type: "text", default: "" },
+    { key: "social_tiktok", label: "TikTok URL", type: "text", default: "" },
+  ]},
   { title: "Checkout налаштування", items: [
     { key: "checkout_require_terms", label: "Вимагати згоду з умовами", type: "select", default: "true", options: ["true", "false"] },
   ]},

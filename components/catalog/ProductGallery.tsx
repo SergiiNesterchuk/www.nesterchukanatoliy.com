@@ -9,7 +9,9 @@ interface ProductGalleryProps {
   productName: string;
 }
 
-export function ProductGallery({ images, productName }: ProductGalleryProps) {
+export function ProductGallery({ images: rawImages, productName }: ProductGalleryProps) {
+  // Filter out invalid/ghost images
+  const images = rawImages.filter((img) => img.url && img.url.startsWith("http"));
   const [activeIndex, setActiveIndex] = useState(0);
 
   if (images.length === 0) {

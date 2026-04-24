@@ -26,6 +26,7 @@ async function getStats() {
       prisma.integrationLog.count({
         where: {
           responseStatus: { gte: 400 },
+          isResolved: false,
           createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
         },
       }),
