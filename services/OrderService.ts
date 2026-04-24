@@ -6,10 +6,11 @@ import type { OrderCreate } from "@/entities/order";
 import { ValidationError, PaymentError } from "@/shared/errors";
 import { createLogger } from "@/shared/logger";
 import { buildAbsoluteUrl } from "@/shared/url";
+import { generatePublicOrderNumber } from "@/shared/order-number";
 
 const logger = createLogger("OrderService");
 
-function generateOrderNumber(): string {
+function generateInternalOrderRef(): string {
   const date = new Date();
   const prefix = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -53,8 +54,16 @@ export class OrderService {
       });
     }
 
+    // Generate both internal ref (for WayForPay) and public number (for customer)
+    let publicNumber: string;
+    try {
+      publicNumber = await generatePublicOrderNumber();
+    } catch {
+      publicNumber = generateInternalOrderRef(); // fallback
+    }
+
     const order = await OrderRepository.create({
-      orderNumber: generateOrderNumber(),
+      orderNumber: publicNumber,
       customerName: input.customerName,
       customerPhone: input.customerPhone,
       customerEmail: input.customerEmail,

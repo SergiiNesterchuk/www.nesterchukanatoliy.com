@@ -11,6 +11,7 @@ import {
   CornerDownRight,
   Home,
   CreditCard,
+  Star,
 } from "lucide-react";
 
 const navItems = [
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/admin/products", label: "Товари", icon: Package },
   { href: "/admin/categories", label: "Категорії", icon: FolderOpen },
   { href: "/admin/orders", label: "Замовлення", icon: ShoppingCart },
+  { href: "/admin/reviews", label: "Відгуки", icon: Star },
   { href: "/admin/pages", label: "Сторінки", icon: FileText },
   { href: "/admin/payment-methods", label: "Оплата", icon: CreditCard },
   { href: "/admin/redirects", label: "Redirects", icon: CornerDownRight },

@@ -43,6 +43,7 @@ model Product {
   category         Category       @relation(fields: [categoryId], references: [id])
   images           ProductImage[]
   orderItems       OrderItem[]
+  reviews          ProductReview[]
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 
@@ -62,9 +63,15 @@ model ProductImage {
   @@index([productId])
 }
 
+model OrderCounter {
+  id    String @id @default("singleton")
+  value Int    @default(5000)
+}
+
 model Order {
   id                 String       @id @default(cuid())
   orderNumber        String       @unique
+  publicOrderNumber  String?      @unique // K-5001, K-5002, ...
   status             String       @default("new")
   customerName       String
   customerPhone      String
@@ -296,4 +303,22 @@ model OrderStatusHistory {
   createdAt DateTime @default(now())
 
   @@index([orderId, createdAt])
+}
+
+model ProductReview {
+  id           String    @id @default(cuid())
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerName String
+  customerEmail String?
+  rating       Int       // 1-5
+  text         String    @db.Text
+  status       String    @default("pending") // pending, approved, rejected
+  source       String    @default("customer") // customer, admin
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([productId, status])
+  @@index([status])
 }

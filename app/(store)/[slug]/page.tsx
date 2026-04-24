@@ -12,6 +12,7 @@ import { SortingSelect } from "@/components/catalog/SortingSelect";
 import { ProductGallery } from "@/components/catalog/ProductGallery";
 import { ProductInfo } from "@/components/catalog/ProductInfo";
 import { ProductTabs } from "@/components/catalog/ProductTabs";
+import { ProductReviews } from "@/components/catalog/ProductReviews";
 import { JsonLd } from "@/components/seo/JsonLd";
 import {
   buildBreadcrumbJsonLd,
@@ -229,6 +230,8 @@ async function ProductView({ slug }: { slug: string }) {
       <div className="mt-10">
         <ProductTabs description={product.description} />
       </div>
+
+      <ProductReviews productId={product.id} />
     </div>
   );
 }

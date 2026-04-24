@@ -47,7 +47,7 @@ interface PaymentMethodOption {
 }
 
 export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }) {
-  const { items, totalPrice, clearCart } = useCartStore();
+  const { items, totalPrice, clearCart, updateQuantity, removeItem } = useCartStore();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
@@ -287,14 +287,23 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
     <form onSubmit={handleSubmit} className="space-y-8">
       {generalError && <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{generalError}</div>}
 
-      {/* Order summary */}
+      {/* Order summary — editable quantities */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Ваше замовлення</h2>
-        <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+        <div className="bg-gray-50 rounded-lg p-4 space-y-3">
           {items.map((item) => (
-            <div key={item.productId} className="flex justify-between text-sm">
-              <span>{item.name} &times; {item.quantity}</span>
-              <span className="font-medium">{formatPrice(item.price * item.quantity)}</span>
+            <div key={item.productId} className="flex items-center justify-between gap-2 text-sm">
+              <span className="flex-1 min-w-0 truncate">{item.name}</span>
+              <div className="flex items-center gap-1 flex-shrink-0">
+                <button type="button" onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                  className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">−</button>
+                <span className="w-8 text-center font-medium tabular-nums">{item.quantity}</span>
+                <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                  className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
+              </div>
+              <span className="font-medium w-20 text-right">{formatPrice(item.price * item.quantity)}</span>
+              <button type="button" onClick={() => removeItem(item.productId)}
+                className="text-gray-400 hover:text-red-500 ml-1" title="Видалити">×</button>
             </div>
           ))}
           <div className="border-t pt-2 flex justify-between font-semibold">

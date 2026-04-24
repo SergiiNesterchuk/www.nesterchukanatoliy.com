@@ -1,12 +1,30 @@
 import Link from "next/link";
 import { Phone, Mail, MapPin } from "lucide-react";
-import { CONTACT, SOCIAL, SITE_NAME } from "@/shared/constants";
+import { CONTACT, SITE_NAME } from "@/shared/constants";
 import { PageRepository } from "@/repositories/PageRepository";
+import { SocialLinks } from "./SocialLinks";
+import { prisma } from "@/shared/db";
 
 export async function Footer() {
   let pages: { title: string; slug: string }[] = [];
+  let socialLinks: Record<string, string> = {};
   try {
     pages = await PageRepository.findForNav();
+    const socialSettings = await prisma.settings.findMany({
+      where: { key: { startsWith: "social_" } },
+    });
+    for (const s of socialSettings) {
+      if (s.value) socialLinks[s.key.replace("social_", "")] = s.value;
+    }
+    // Fallback to hardcoded if no settings yet
+    if (Object.keys(socialLinks).length === 0) {
+      socialLinks = {
+        instagram: "https://www.instagram.com/nesterchuk_anatoliy",
+        youtube: "https://youtube.com/@nesterchuk_anatoliy",
+        facebook: "https://www.facebook.com/profile.php?id=100025198117909",
+        tiktok: "https://www.tiktok.com/@nesterchuk_anatoliy",
+      };
+    }
   } catch { /* DB unavailable */ }
 
   return (
@@ -19,12 +37,7 @@ export async function Footer() {
             <p className="text-sm leading-relaxed">
               Натуральний яблучний оцет власного виробництва та засоби для захисту саду.
             </p>
-            <div className="flex gap-3 mt-4">
-              <a href={SOCIAL.instagram} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors text-sm">Instagram</a>
-              <a href={SOCIAL.youtube} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors text-sm">YouTube</a>
-              <a href={SOCIAL.facebook} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors text-sm">Facebook</a>
-              <a href={SOCIAL.tiktok} target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors text-sm">TikTok</a>
-            </div>
+            <SocialLinks links={socialLinks} className="mt-4" />
           </div>
 
           {/* Navigation — dynamic from DB */}
