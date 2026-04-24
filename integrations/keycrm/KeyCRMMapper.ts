@@ -124,9 +124,11 @@ export class KeyCRMMapper {
       shipping.shipping_secondary_line = order.deliveryAddress;
     }
 
-    // Nova Poshta warehouse Ref (for automated TTN creation in KeyCRM)
-    if (order.deliveryBranchRef) {
+    // Nova Poshta warehouse Ref — requires delivery_service_id in KeyCRM
+    const npServiceId = process.env.KEYCRM_NOVA_POSHTA_SERVICE_ID;
+    if (order.deliveryBranchRef && npServiceId) {
       shipping.warehouse_ref = order.deliveryBranchRef;
+      shipping.delivery_service_id = parseInt(npServiceId, 10);
     }
 
     const keycrmOrder: KeyCRMOrderCreate = {

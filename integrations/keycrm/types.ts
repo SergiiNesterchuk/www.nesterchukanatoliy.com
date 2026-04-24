@@ -25,6 +25,7 @@ export interface KeyCRMShipping {
   recipient_phone?: string;
   warehouse_ref?: string;
   delivery_service?: string;
+  delivery_service_id?: number;
   tracking_code?: string;
 }
 
