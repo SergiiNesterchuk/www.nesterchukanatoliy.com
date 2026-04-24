@@ -326,6 +326,24 @@ async function main() {
     });
   }
 
+  // TopBar defaults
+  const topbarDefaults = [
+    { key: "topbar_enabled", value: "true" },
+    { key: "topbar_show_phone", value: "true" },
+    { key: "topbar_phone", value: "093-000-3008" },
+    { key: "topbar_phone_label", value: "093-000-3008" },
+    { key: "topbar_phone_link_type", value: "tel" },
+    { key: "topbar_show_socials", value: "true" },
+  ];
+
+  for (const s of topbarDefaults) {
+    await prisma.settings.upsert({
+      where: { key: s.key },
+      update: {},
+      create: s,
+    });
+  }
+
   // Admin user (password: admin123 — change in production!)
   const passwordHash = createHash("sha256").update("admin123").digest("hex");
   await prisma.adminUser.upsert({

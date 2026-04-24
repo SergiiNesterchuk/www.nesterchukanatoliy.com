@@ -11,6 +11,14 @@ const SECTIONS = [
     { key: "product_page_layout", label: "Layout", type: "select", default: "layout_2", options: ["layout_1", "layout_2", "layout_3", "layout_4", "layout_5"],
       optionLabels: { layout_1: "Класичний: фото зліва, купівля справа", layout_2: "Sticky: фото фіксується, опис скролиться", layout_3: "Лендінг: велике фото + довгий опис", layout_4: "Компактний магазин", layout_5: "Мобільний accordion + sticky buy" } },
   ]},
+  { title: "Верхня панель сайту", hint: "Темна смужка зверху сайту з телефоном і соцмережами (desktop). Соцмережі беруться з секції Соцмережі нижче.", items: [
+    { key: "topbar_enabled", label: "Показувати верхню панель", type: "select", default: "true", options: ["true", "false"] },
+    { key: "topbar_show_phone", label: "Показувати телефон", type: "select", default: "true", options: ["true", "false"] },
+    { key: "topbar_phone", label: "Номер телефону", type: "text", default: "093-000-3008" },
+    { key: "topbar_phone_label", label: "Підпис (напр. 'Viber' або '093-000-3008')", type: "text", default: "" },
+    { key: "topbar_phone_link_type", label: "Тип посилання", type: "select", default: "tel", options: ["tel", "viber"], optionLabels: { tel: "Дзвінок (tel:)", viber: "Viber (viber://)" } },
+    { key: "topbar_show_socials", label: "Показувати соцмережі", type: "select", default: "true", options: ["true", "false"] },
+  ]},
   { title: "Hero секція", hint: "Вимкніть Hero, якщо хочете, щоб головна одразу починалась із товарів або контентного блоку.", items: [
     { key: "homepage_show_hero", label: "Показувати Hero section", type: "select", default: "true", options: ["true", "false"] },
     { key: "homepage_title", label: "Заголовок", type: "text", default: "Натуральні продукти" },
