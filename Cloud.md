@@ -273,7 +273,154 @@ railway run pg_dump $DATABASE_URL > backup.sql
 
 ---
 
-## 12. Deploy Flow
+## 12. What Lives Where
+
+| System | Stores | Backup responsibility |
+|--------|--------|----------------------|
+| **GitHub** | Code, Prisma schema, seed, configs | Git history |
+| **Railway PostgreSQL** | Products, pages, orders, customers, settings, payment methods | `pg_dump` before migrations |
+| **Cloudflare R2** | Uploaded product images | R2 has its own durability |
+| **KeyCRM** | Operational orders, buyer data, payments, statuses | KeyCRM's responsibility |
+| **WayForPay** | Card payment transactions, refunds | WayForPay's responsibility |
+| **Nova Poshta** | Delivery directory, future TTN | Nova Poshta's responsibility |
+| **Browser localStorage** | Recent order numbers (non-critical) | Not backed up |
+
+**Key insight:** If Railway PostgreSQL is lost, ALL orders/products/settings are gone. Regular `pg_dump` backups are essential.
+
+---
+
+## 13. Order Lifecycle
+
+### Card Payment Flow (card_wayforpay)
+
+```
+Cart → Checkout form → POST /api/checkout
+  → Local Order created (status: new, paymentStatus: pending)
+  → WayForPay session created → user redirected to WayForPay
+  → User pays → WayForPay callback POST /api/payment/callback
+  → Signature verified → paymentStatus: paid
+  → KeyCRM sync triggered (async)
+  → KeyCRM order + payment created, keycrmPaymentId saved
+  → User redirected to success page
+```
+
+### COD Flow (cod_cash_on_delivery)
+
+```
+Cart → Checkout form → POST /api/checkout
+  → Local Order created (status: new, paymentStatus: cod_pending)
+  → WayForPay NOT called (guard clause)
+  → KeyCRM sync triggered immediately
+  → KeyCRM order created with payment_method: cash_on_delivery, status: not_paid
+  → User redirected to success page ("Оплата при отриманні")
+```
+
+### Status Table
+
+| Status field | Values | Visible to customer? |
+|-------------|--------|---------------------|
+| `status` | new, confirmed, processing, paid, shipped, delivered, completed, cancelled | Yes (Ukrainian labels) |
+| `paymentStatus` | pending, cod_pending, paid, failed, refunded, cancelled | Yes |
+| `deliveryStatus` | null, shipped, in_transit, delivered | Yes |
+| `keycrmSyncStatus` | pending, synced, failed | **No** (admin only) |
+| `trackingNumber` | null or NP tracking | Yes (when available) |
+
+### Refund/Cancel Flow
+
+```
+WayForPay refund/cancel callback
+  → paymentStatus: failed/refunded
+  → PaymentEvent recorded
+  → If keycrmPaymentId exists:
+      → PUT /order/{id}/payment/{paymentId} status:canceled in KeyCRM
+  → If no keycrmPaymentId (old orders):
+      → Comment added to KeyCRM order (manual check required)
+  → OrderStatusHistory updated
+```
+
+### Refund Sync: Old vs New Orders
+
+| Order type | keycrmPaymentId | Refund behavior |
+|-----------|-----------------|-----------------|
+| **Old** (before fix) | Not saved | Comment only → **manual cancellation in KeyCRM** |
+| **New** (after fix) | Saved after sync | **Automatic** financial payment cancellation in KeyCRM |
+| Refund sync failed | — | `keycrmSyncStatus: failed` → manual retry in admin |
+| Duplicate callback | — | Idempotent — no duplicate refund |
+
+**Where to check:** Admin → Orders → [order] → CRM Sync status + Integration Logs
+
+---
+
+## 14. Business Switch Checklist
+
+When changing ФОП, merchant, delivery sender, or CRM account:
+
+### WayForPay (payment processor)
+- [ ] Get new credentials from WayForPay dashboard
+- [ ] Change in Railway Variables:
+  - `WAYFORPAY_MERCHANT_ACCOUNT`
+  - `WAYFORPAY_MERCHANT_SECRET`
+  - `WAYFORPAY_MERCHANT_DOMAIN`
+- [ ] Redeploy
+- [ ] Test: small card payment → success → refund test
+
+### KeyCRM
+- [ ] Get new API key from KeyCRM → Settings → API
+- [ ] Change in Railway Variables:
+  - `KEYCRM_API_KEY`
+  - `KEYCRM_SOURCE_ID` (check new KeyCRM sources)
+  - `KEYCRM_NOVA_POSHTA_SERVICE_ID` (check new delivery services)
+- [ ] Redeploy
+- [ ] Test: create order → appears in KeyCRM with correct delivery
+
+### Nova Poshta
+- [ ] Get new API key from NP dashboard
+- [ ] Change: `NOVAPOSHTA_API_KEY`
+- [ ] Redeploy
+- [ ] Test: search "Бровари" in checkout → warehouses load
+- [ ] Future TTN: also update sender/counterparty refs if applicable
+
+### Cloudflare R2 (if changing storage)
+- [ ] Change: `S3_ENDPOINT`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET`, `S3_PUBLIC_URL`
+- [ ] Migrate existing images to new bucket
+- [ ] Redeploy
+- [ ] Test: upload new photo → displays on site
+
+### Domain change
+- [ ] Update: `SITE_URL`, `WAYFORPAY_MERCHANT_DOMAIN`
+- [ ] Configure DNS for new domain → Railway
+- [ ] Update WayForPay merchant settings (allowed domains)
+- [ ] Redeploy
+- [ ] Test: full checkout → payment → redirect back to site
+
+### Email (future)
+- [ ] Change: `EMAIL_FROM`, `RESEND_API_KEY`
+- [ ] Verify domain in Resend/provider
+
+### Post-switch verification
+- [ ] Card checkout → payment → success page
+- [ ] COD checkout → no WayForPay → success page
+- [ ] KeyCRM: order appears with delivery + payment
+- [ ] Nova Poshta: city search works
+- [ ] Photo upload works
+- [ ] /order-status → order found
+- [ ] Admin panel → all sections load
+
+---
+
+## 15. Secrets Separation Rule
+
+| Secret | Used for | Where |
+|--------|----------|-------|
+| `ADMIN_JWT_SECRET` | Admin panel auth cookies **only** | Admin login, middleware |
+| `CRON_SECRET` | Cron endpoint auth **only** | `/api/cron/*` endpoints |
+
+**Never** use `ADMIN_JWT_SECRET` for cron endpoints or external services.
+**Never** use `CRON_SECRET` for admin auth.
+
+---
+
+## 16. Deploy Flow
 
 ```
 git push main
@@ -293,7 +440,7 @@ npm run start (Next.js on $PORT)
 
 ---
 
-## 13. Troubleshooting
+## 17. Troubleshooting
 
 ### 500 on homepage
 ```
@@ -340,10 +487,19 @@ Fix:   Set correct API key, redeploy
 
 ### Payment refund only writes comment in KeyCRM
 ```
-Cause: keycrmPaymentId not saved (old orders before fix)
-Fix:   New orders save keycrmPaymentId after sync.
-       For old orders: manual payment cancellation in KeyCRM
+Cause: keycrmPaymentId not saved (old orders before keycrmPaymentId fix)
 ```
+
+**IMPORTANT — old vs new orders:**
+
+| Order type | keycrmPaymentId | Refund sync |
+|-----------|-----------------|-------------|
+| Old (before fix) | `null` | Comment only → **manual cancellation in KeyCRM** |
+| New (after fix) | Saved | **Automatic:** `PUT /order/{id}/payment/{paymentId}` with `status:canceled` |
+| Sync failed | — | `keycrmSyncStatus: failed` → retry via admin |
+| Duplicate callback | — | Idempotent — skipped if already refunded |
+
+**Where to check:** Admin → Orders → [order] → CRM Sync status, Payment Events, Integration Logs
 
 ### Cron not updating statuses
 ```
@@ -353,7 +509,7 @@ Fix:   Check cron service logs, verify secrets match
 
 ---
 
-## 14. Future Email Setup
+## 18. Future Email Setup
 
 **Provider:** Resend (https://resend.com)
 
@@ -374,7 +530,7 @@ RESEND_API_KEY=re_xxxxx
 
 ---
 
-## 15. Maintenance Checklist
+## 19. Maintenance Checklist
 
 | After... | Do... |
 |----------|-------|
@@ -390,7 +546,7 @@ RESEND_API_KEY=re_xxxxx
 
 ---
 
-## 16. Production URLs
+## 20. Production URLs
 
 | URL | Purpose |
 |-----|---------|
@@ -404,3 +560,21 @@ RESEND_API_KEY=re_xxxxx
 | Cron sync | `.../api/cron/keycrm-status-sync?secret=CRON_SECRET` |
 
 **Admin credentials:** `admin@nesterchukanatoliy.com` / `admin123` (change in production!)
+
+---
+
+## 21. Change Documentation Rule
+
+Every code change that does any of the following **must update Cloud.md in the same commit:**
+
+- Adds a new environment variable
+- Adds a new external integration
+- Adds a new API endpoint
+- Adds a new payment method
+- Adds a new cron job
+- Changes storage/CDN configuration
+- Changes email provider
+- Changes production deploy flow
+- Changes KeyCRM/WayForPay/NovaPoshta mapping
+
+**If Cloud.md is not updated, the task is incomplete.**
