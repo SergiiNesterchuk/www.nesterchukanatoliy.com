@@ -14,18 +14,25 @@ export interface KeyCRMOrderProduct {
   picture?: string;
 }
 
+export interface KeyCRMShipping {
+  shipping_address_city?: string;
+  shipping_address_country?: string;
+  shipping_address_region?: string;
+  shipping_address_zip?: string;
+  shipping_secondary_line?: string;
+  shipping_receive_point?: string;
+  recipient_full_name?: string;
+  recipient_phone?: string;
+  warehouse_ref?: string;
+  delivery_service?: string;
+  tracking_code?: string;
+}
+
 export interface KeyCRMOrderCreate {
   source_id: number;
   buyer: KeyCRMBuyer;
   products: KeyCRMOrderProduct[];
-  shipping: {
-    delivery_service: string;
-    tracking_code?: string;
-    shipping_address_city?: string;
-    shipping_address?: string;
-    recipient_full_name: string;
-    recipient_phone: string;
-  };
+  shipping: KeyCRMShipping;
   payments?: Array<{
     payment_method: string;
     amount: number;

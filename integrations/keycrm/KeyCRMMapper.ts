@@ -105,18 +105,29 @@ export class KeyCRMMapper {
       return stripUndefined(product);
     });
 
-    // Build full shipping address text for KeyCRM
-    const shippingAddress = order.deliveryBranchName
-      || order.deliveryAddress
-      || "";
-
-    const shipping = stripUndefined({
-      delivery_service: deliveryService,
+    // Build structured shipping for KeyCRM right panel
+    // KeyCRM fields: shipping_address_city, shipping_receive_point, shipping_secondary_line,
+    // recipient_full_name, recipient_phone, warehouse_ref
+    const shipping: KeyCRMOrderCreate["shipping"] = {
       shipping_address_city: order.deliveryCity || "",
-      shipping_address: shippingAddress,
       recipient_full_name: buyerName,
       recipient_phone: phone,
-    });
+    };
+
+    // Receive point = warehouse/postomat description (shown in KeyCRM delivery panel)
+    if (order.deliveryBranchName) {
+      shipping.shipping_receive_point = order.deliveryBranchName;
+    }
+
+    // Secondary line = courier address or additional delivery info
+    if (order.deliveryAddress && order.deliveryMethod === "nova_poshta_courier") {
+      shipping.shipping_secondary_line = order.deliveryAddress;
+    }
+
+    // Nova Poshta warehouse Ref (for automated TTN creation in KeyCRM)
+    if (order.deliveryBranchRef) {
+      shipping.warehouse_ref = order.deliveryBranchRef;
+    }
 
     const keycrmOrder: KeyCRMOrderCreate = {
       source_id: sourceId,
