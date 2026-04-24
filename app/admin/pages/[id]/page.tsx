@@ -37,19 +37,24 @@ export default async function AdminPageEditPage({
           <div className="flex flex-col gap-2 pt-6">
             <label className="flex items-center gap-2">
               <input type="checkbox" id="isActive" name="isActive" defaultChecked={page?.isActive ?? true} className="rounded" />
-              <span className="text-sm">Активна</span>
+              <span className="text-sm">Активна сторінка</span>
             </label>
+            <p className="text-xs text-gray-400 mt-1 mb-1">Де показувати посилання:</p>
             <label className="flex items-center gap-2">
               <input type="checkbox" id="showInNav" name="showInNav" defaultChecked={page?.showInNav ?? true} className="rounded" />
-              <span className="text-sm">Показувати в меню (header)</span>
+              <span className="text-sm">Верхнє меню (desktop)</span>
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" id="showInMobileMenu" name="showInMobileMenu" defaultChecked={page?.showInMobileMenu ?? true} className="rounded" />
+              <span className="text-sm">Мобільне меню</span>
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" id="showInFooter" name="showInFooter" defaultChecked={page?.showInFooter ?? true} className="rounded" />
-              <span className="text-sm">Показувати у футері</span>
+              <span className="text-sm">Футер</span>
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" id="displayOnHome" name="displayOnHome" defaultChecked={page?.displayOnHome ?? false} className="rounded" />
-              <span className="text-sm">Показувати на головній</span>
+              <span className="text-sm">Блок на головній сторінці</span>
             </label>
           </div>
         </div>

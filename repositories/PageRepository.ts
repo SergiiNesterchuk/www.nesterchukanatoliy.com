@@ -7,7 +7,7 @@ export class PageRepository {
     });
   }
 
-  /** Pages visible in header navigation */
+  /** Pages visible in desktop header navigation */
   static async findForNav() {
     return prisma.page.findMany({
       where: { isActive: true, showInNav: true },
@@ -20,6 +20,15 @@ export class PageRepository {
   static async findForFooter() {
     return prisma.page.findMany({
       where: { isActive: true, showInFooter: true },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true, title: true, slug: true },
+    });
+  }
+
+  /** Pages visible in mobile menu */
+  static async findForMobile() {
+    return prisma.page.findMany({
+      where: { isActive: true, showInMobileMenu: true },
       orderBy: { sortOrder: "asc" },
       select: { id: true, title: true, slug: true },
     });

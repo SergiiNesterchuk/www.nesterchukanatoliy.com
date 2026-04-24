@@ -46,11 +46,10 @@ export async function Footer() {
             <nav className="space-y-2 text-sm">
               <Link href="/katalog/" className="block hover:text-white transition-colors">Каталог</Link>
               {pages.map((page) => (
-                <Link key={page.slug} href={`/${page.slug}/`} className="block hover:text-white transition-colors">
+                <Link key={page.slug} href={page.slug.startsWith("http") ? page.slug : `/${page.slug}/`} className="block hover:text-white transition-colors">
                   {page.title}
                 </Link>
               ))}
-              <Link href="/order-status/" className="block hover:text-white transition-colors">Статус замовлення</Link>
             </nav>
           </div>
 

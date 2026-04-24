@@ -274,6 +274,24 @@ async function main() {
     });
   }
 
+  // System navigation page: "Статус замовлення"
+  await prisma.page.upsert({
+    where: { slug: "order-status" },
+    update: {},
+    create: {
+      title: "Статус замовлення",
+      slug: "order-status",
+      content: "Системна сторінка — контент не відображається, використовується як навігаційне посилання.",
+      isActive: true,
+      showInNav: false,
+      showInFooter: true,
+      showInMobileMenu: true,
+      displayOnHome: false,
+      isSystem: true,
+      sortOrder: 99,
+    },
+  });
+
   // Settings
   const settings = [
     { key: "site_name", value: "Магазин Анатолія Нестерчука" },

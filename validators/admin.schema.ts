@@ -37,6 +37,7 @@ export const pageSchema = z.object({
   isActive: z.coerce.boolean().default(true),
   showInNav: z.coerce.boolean().default(true),
   showInFooter: z.coerce.boolean().default(true),
+  showInMobileMenu: z.coerce.boolean().default(true),
   displayOnHome: z.coerce.boolean().default(false),
   sortOrder: z.coerce.number().int().default(0),
   metaTitle: z.string().max(200).optional().default(""),

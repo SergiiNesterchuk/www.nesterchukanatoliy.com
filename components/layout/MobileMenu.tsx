@@ -31,7 +31,7 @@ export function MobileMenu({ categories, pages }: MobileMenuProps) {
           <div className="fixed inset-0 bg-black/40 z-40" onClick={close} />
           <div className="fixed top-0 left-0 h-full w-72 bg-white z-50 shadow-xl overflow-y-auto">
             <div className="p-4 border-b flex items-center justify-between">
-              <span className="font-semibold">Меню</span>
+              <span className="font-semibold text-gray-900">Нестерчук Анатолій</span>
               <button onClick={close} className="p-1" aria-label="Закрити">
                 <X className="h-5 w-5" />
               </button>

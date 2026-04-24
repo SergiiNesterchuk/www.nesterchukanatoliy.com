@@ -191,10 +191,12 @@ model Page {
   title         String
   slug          String   @unique
   content       String   @db.Text
-  isActive      Boolean  @default(true)
-  showInNav     Boolean  @default(true)
-  showInFooter  Boolean  @default(true)
-  displayOnHome Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  showInNav       Boolean  @default(true)
+  showInFooter    Boolean  @default(true)
+  showInMobileMenu Boolean @default(true)
+  displayOnHome   Boolean  @default(false)
+  isSystem        Boolean  @default(false)
   metaTitle     String?
   metaDesc      String?
   sortOrder     Int      @default(0)
