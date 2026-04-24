@@ -150,7 +150,7 @@ export class KeyCRMMapper {
     // Manager comment with full delivery details for TTN creation
     keycrmOrder.manager_comment = buildDeliveryComment(order);
 
-    // Payment
+    // Payment — attach if paid, or describe COD
     if (order.paymentStatus === "paid") {
       keycrmOrder.payments = [
         {
@@ -160,6 +160,16 @@ export class KeyCRMMapper {
           description: order.externalPaymentId
             ? `WayForPay: ${order.externalPaymentId}`
             : "Оплата карткою",
+        },
+      ];
+    } else if (order.paymentMethod.includes("cod")) {
+      // COD — mark as unpaid cash on delivery
+      keycrmOrder.payments = [
+        {
+          payment_method: "cash_on_delivery",
+          amount: Number(toHryvni(order.total)) || 0,
+          status: "not_paid",
+          description: "Накладений платіж — оплата при отриманні",
         },
       ];
     }

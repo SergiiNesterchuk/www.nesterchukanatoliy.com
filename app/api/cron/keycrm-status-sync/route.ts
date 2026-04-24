@@ -11,7 +11,8 @@ const logger = createLogger("KeyCRMStatusSync");
  */
 export async function POST(request: NextRequest) {
   const secret = request.nextUrl.searchParams.get("secret");
-  if (secret !== process.env.ADMIN_JWT_SECRET) {
+  const expectedSecret = process.env.CRON_SECRET || process.env.ADMIN_JWT_SECRET;
+  if (!expectedSecret || secret !== expectedSecret) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

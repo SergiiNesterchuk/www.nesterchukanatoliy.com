@@ -45,6 +45,7 @@ export const ORDER_STATUSES = {
 
 export const PAYMENT_STATUSES = {
   pending: "Очікує оплати",
+  cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
   failed: "Помилка оплати",
   refunded: "Повернено",

@@ -16,6 +16,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   pending: "Очікує оплати",
+  cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
   failed: "Помилка оплати",
   refunded: "Повернено",

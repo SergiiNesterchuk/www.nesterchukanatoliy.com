@@ -60,11 +60,19 @@ export async function POST(request: NextRequest) {
           : null,
       });
     } else {
-      // COD / no online payment flow
-      // Sync to KeyCRM immediately (order is created, payment will be collected on delivery)
+      // COD / no online payment flow — no WayForPay, sync to KeyCRM immediately
+      try {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: "cod_pending", status: "new" },
+        });
+        await prisma.orderStatusHistory.create({
+          data: { orderId: order.id, source: "local", newStatus: "cod_pending", message: "Обрано оплату при отриманні" },
+        });
+      } catch { /* non-critical */ }
+
       if (process.env.CRM_SYNC_ENABLED !== "false") {
-        const { prisma: db } = await import("@/shared/db");
-        await db.order.update({
+        await prisma.order.update({
           where: { id: order.id },
           data: { keycrmSyncStatus: "pending" },
         });
