@@ -97,8 +97,17 @@ model Order {
   utmTerm            String?
   utmContent         String?
   source             String       @default("website")
+  customerId         String?
+  customer           Customer?    @relation(fields: [customerId], references: [id])
+  trackingNumber     String?
+  deliveryStatus     String?
+  keycrmStatusId     Int?
+  keycrmStatusName   String?
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
   items              OrderItem[]
   payments           PaymentEvent[]
+  statusHistory      OrderStatusHistory[]
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
 
@@ -107,6 +116,8 @@ model Order {
   @@index([paymentStatus])
   @@index([status])
   @@index([createdAt])
+  @@index([customerId])
+  @@index([customerPhone])
 }
 
 model OrderItem {
@@ -233,4 +244,41 @@ model SyncJob {
 
   @@index([status, nextRetryAt])
   @@index([entityType, entityId])
+}
+
+model Customer {
+  id              String   @id @default(cuid())
+  phoneNormalized String   @unique
+  email           String?
+  name            String?
+  orders          Order[]
+  sessions        CustomerSession[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model CustomerSession {
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
+  @@index([tokenHash])
+}
+
+model OrderStatusHistory {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  source    String   // local, keycrm, payment, system
+  oldStatus String?
+  newStatus String
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
 }

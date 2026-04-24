@@ -76,6 +76,25 @@ export class OrderService {
       items: orderItems,
     });
 
+    // Create or find Customer by phone
+    try {
+      const { prisma } = await import("@/shared/db");
+      const normalizedPhone = input.customerPhone;
+      const customer = await prisma.customer.upsert({
+        where: { phoneNormalized: normalizedPhone },
+        update: { name: input.customerName, email: input.customerEmail || undefined },
+        create: { phoneNormalized: normalizedPhone, name: input.customerName, email: input.customerEmail || undefined },
+      });
+      await prisma.order.update({ where: { id: order.id }, data: { customerId: customer.id } });
+
+      // Record initial status
+      await prisma.orderStatusHistory.create({
+        data: { orderId: order.id, source: "local", newStatus: "new", message: "Замовлення створено" },
+      });
+    } catch (e) {
+      logger.warn("Customer/history creation failed", { error: e instanceof Error ? e.message : String(e) });
+    }
+
     logger.info("Order created", { orderId: order.id, orderNumber: order.orderNumber, total: order.total });
     return order;
   }
@@ -167,6 +186,13 @@ export class OrderService {
         externalPaymentId: result.externalPaymentId,
         status: "paid",
       });
+
+      // Status history
+      try {
+        await prisma.orderStatusHistory.create({
+          data: { orderId: order.id, source: "payment", oldStatus: order.paymentStatus, newStatus: "paid", message: "Оплату отримано" },
+        });
+      } catch { /* non-critical */ }
 
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });

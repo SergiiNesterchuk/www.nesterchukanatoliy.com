@@ -84,10 +84,10 @@ export default async function CheckoutSuccessPage({
           На головну
         </Link>
         <Link
-          href="/kontaktna-informatsiya/"
+          href="/order-status/"
           className="px-6 py-3 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition-colors"
         >
-          Зв&apos;язатися з нами
+          Перевірити статус замовлення
         </Link>
       </div>
     </div>

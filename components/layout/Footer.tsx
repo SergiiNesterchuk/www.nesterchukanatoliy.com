@@ -37,6 +37,7 @@ export async function Footer() {
                   {page.title}
                 </Link>
               ))}
+              <Link href="/order-status/" className="block hover:text-white transition-colors">Статус замовлення</Link>
             </nav>
           </div>
 
