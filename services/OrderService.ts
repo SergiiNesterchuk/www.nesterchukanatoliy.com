@@ -228,7 +228,9 @@ export class OrderService {
 
       logger.info("Payment successful", { orderId: order.id, orderNumber: order.orderNumber });
     } else if (result.status === "failure") {
-      await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: "failed" });
+      // Set appropriate failure status based on payment purpose
+      const failStatus = order.paymentPurpose === "cod_prepayment" ? "prepayment_failed" : "failed";
+      await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: failStatus });
 
       // Sync to KeyCRM: reversal if already synced, create if not
       if (process.env.CRM_SYNC_ENABLED !== "false") {

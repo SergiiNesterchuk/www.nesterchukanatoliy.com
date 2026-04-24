@@ -76,8 +76,9 @@ export class KeyCRMService {
       );
 
       // Try to get payment ID from KeyCRM order (for future refund sync)
+      // Works for both full_payment (paid) and cod_prepayment (partial_paid)
       let keycrmPaymentId: string | undefined;
-      if (order.paymentStatus === "paid") {
+      if (order.paymentStatus === "paid" || order.paymentStatus === "partial_paid") {
         try {
           const fullOrder = await this.client.request<{ payments?: Array<{ id: number }> }>(
             "GET",
@@ -183,15 +184,22 @@ export class KeyCRMService {
     if (!order || !order.keycrmOrderId) return;
 
     // Idempotency: if already synced with final refund/failed status, skip
-    if (order.keycrmSyncStatus === "synced" && ["refunded", "cancelled"].includes(order.paymentStatus)) {
+    if (order.keycrmSyncStatus === "synced" && ["refunded", "cancelled", "prepayment_failed"].includes(order.paymentStatus)) {
       logger.info("Refund already synced, skipping", { orderId });
       return;
     }
 
+    // Determine refund amount: prepayment amount for COD, full total for card
+    const isCodPrepayment = order.paymentPurpose === "cod_prepayment";
+    const refundAmount = isCodPrepayment && order.prepaymentAmount
+      ? order.prepaymentAmount
+      : order.total;
+    const refundLabel = isCodPrepayment ? "Передплата" : "Оплата";
+
     try {
       let refundSynced = false;
 
-      // If we have keycrmPaymentId, try to update the payment status
+      // If we have keycrmPaymentId, cancel the specific payment record
       if (order.keycrmPaymentId) {
         try {
           await this.client.request(
@@ -205,6 +213,8 @@ export class KeyCRMService {
           logger.info("Payment refund synced via payment update", {
             orderId,
             keycrmPaymentId: order.keycrmPaymentId,
+            isCodPrepayment,
+            refundAmount,
           });
         } catch (e) {
           logger.warn("Payment update endpoint failed, falling back to comment", {
@@ -214,10 +224,10 @@ export class KeyCRMService {
         }
       }
 
-      // Always update order comment with refund info
+      // Comment with correct amount (prepayment or full)
       const commentText = refundSynced
-        ? `Оплата WayForPay скасована/повернена. Статус: ${order.paymentStatus}. Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(order.total / 100).toFixed(2)} UAH. Фінансовий статус у KeyCRM синхронізовано.`
-        : `Увага: платіж WayForPay повернено (${order.paymentStatus}). Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(order.total / 100).toFixed(2)} UAH. Потрібна ручна перевірка фінансового запису.`;
+        ? `${refundLabel} WayForPay скасована/повернена. Статус: ${order.paymentStatus}. Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(refundAmount / 100).toFixed(2)} UAH. Фінансовий запис у KeyCRM синхронізовано.`
+        : `Увага: ${refundLabel.toLowerCase()} WayForPay повернено (${order.paymentStatus}). Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(refundAmount / 100).toFixed(2)} UAH. Потрібна ручна перевірка фінансового запису.`;
 
       await this.client.request(
         "PUT",
@@ -260,8 +270,9 @@ export class KeyCRMService {
       const order = await OrderRepository.findById(orderId);
       if (!order) return { success: false, error: "Order not found" };
 
-      // If payment failed and order exists in KeyCRM — sync reversal, not create
-      if (order.paymentStatus === "failed" && order.keycrmOrderId) {
+      // If payment failed/refunded and order exists in KeyCRM — sync reversal, not create
+      const isRefundable = ["failed", "refunded", "cancelled", "prepayment_failed"].includes(order.paymentStatus);
+      if (isRefundable && order.keycrmOrderId) {
         await this.syncPaymentReversal(orderId);
         return { success: true };
       }
