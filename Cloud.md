@@ -443,7 +443,47 @@ railway run pg_dump $DATABASE_URL > backup.sql
 | 15 | `card` | Card | Так |
 | 16 | `cash_on_delivery` | Cash_on_delivery | Так |
 
+**Всі методи оплати (включаючи неактивні):**
+
+| ID | Alias | Назва | Активний |
+|----|-------|-------|----------|
+| 1 | `gotivka` | Готівка | Ні |
+| 2 | `perekaz_na_kartu` | Переказ на карту | Ні |
+| 3 | `oplata_na_raxunok` | Оплата на рахунок | Так |
+| 4 | `paypal` | PayPal | Ні |
+| 5 | `other` | Other | Ні |
+| 7 | `bezgotivkovii_rozraxunok` | Безготівковий розрахунок | Ні |
+| 8 | `100_onlain_oplata_bankivskoyu_kartkoyu_wayforpay` | 100% Онлайн-оплата банківською карткою (WayForPay) | **Так** |
+| 9 | `oplata_za_rekvizitami` | Оплата за реквізитами | Ні |
+| 10 | `mozlivo_monopay` | можливо MonoPay | Ні |
+| 11 | `wayforpay_invois` | WayForPay (інвойс) | Так |
+| 12 | `pislyaplata_peredplata_300grn` | Післяплата (Передплата 300грн) | Ні |
+| 13 | `nakladenii_platiz_z_peredplatoyu_300grn` | Накладений платіж (з передплатою 300грн) | Так |
+| 14 | `wayforpay` | WayForPay | Так |
+| 15 | `card` | Card | Так |
+| 16 | `cash_on_delivery` | Cash_on_delivery | Так |
+
 **Для 100% онлайн-оплати WayForPay сайт використовує ID 8.**
+
+### Як отримати актуальний список методів
+
+**Через API (production):**
+```
+GET https://nesterchukanatoliy.com/api/admin/keycrm-payment-methods
+```
+
+**Через API з перевіркою конкретного замовлення:**
+```
+GET https://nesterchukanatoliy.com/api/admin/keycrm-payment-methods?orderId=3926
+```
+
+**Напряму через KeyCRM API:**
+```
+GET https://openapi.keycrm.app/v1/order/payment-method
+Authorization: Bearer {KEYCRM_API_KEY}
+```
+
+**В коді:** `KEYCRM_PAYMENT_METHOD_CARD_ID` env variable (default: `8`). Змінити в Railway → Variables якщо ID зміниться.
 
 ### Правильний формат payment payload
 
