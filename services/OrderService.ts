@@ -272,15 +272,27 @@ export class OrderService {
         });
       });
     } else if (result.status === "failure") {
-      // Set appropriate failure status based on payment purpose
-      const failStatus = order.paymentPurpose === "cod_prepayment" ? "prepayment_failed" : "failed";
+      // Distinguish: refund after successful charge vs declined before charge
+      const wasPreviouslyCharged = ["paid", "partial_paid"].includes(order.paymentStatus);
+      const isCodPrepayment = order.paymentPurpose === "cod_prepayment" || order.paymentMethod.includes("cod");
+
+      let failStatus: string;
+      let failMessage: string;
+
+      if (wasPreviouslyCharged) {
+        // Refund/cancellation AFTER money was charged
+        failStatus = "refunded";
+        failMessage = isCodPrepayment ? "Передплату скасовано / кошти повернено" : "Кошти повернено";
+      } else {
+        // Declined BEFORE charge
+        failStatus = isCodPrepayment ? "prepayment_failed" : "failed";
+        failMessage = isCodPrepayment ? "Передплата не пройшла" : "Оплата не пройшла";
+      }
+
       await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: failStatus });
 
-      // Status history for failure
+      // Status history
       try {
-        const failMessage = order.paymentPurpose === "cod_prepayment"
-          ? "Передплата не пройшла"
-          : "Оплата не пройшла";
         await prisma.orderStatusHistory.create({
           data: { orderId: order.id, source: "payment_callback", oldStatus: order.paymentStatus, newStatus: failStatus, message: failMessage },
         });

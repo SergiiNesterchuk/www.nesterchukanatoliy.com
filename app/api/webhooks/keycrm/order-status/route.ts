@@ -12,10 +12,11 @@ const ENDPOINT = "/api/webhooks/keycrm/order-status";
  * URL configured in KeyCRM:
  *   POST /api/webhooks/keycrm/order-status?secret=KEYCRM_WEBHOOK_SECRET
  *
- * Handles:
- *  - Order status change → maps to 6 global statuses, updates Order + OrderStatusHistory
- *  - Payment/invoice events → logs and returns 200
- *  - Unknown events → logs and returns 200
+ * KeyCRM webhook payload structure:
+ *   { event: "order.status_changed", context: { id: 3911, ... } }
+ *
+ * Strategy: use webhook as trigger → fetch full order from KeyCRM API →
+ * update local order status/delivery/tracking.
  */
 export async function POST(request: NextRequest) {
   // --- Auth ---
@@ -37,23 +38,41 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // --- Detect event type ---
-    const eventType = detectEventType(payload);
+    // --- Parse KeyCRM webhook structure: { event, context } ---
+    const eventName = String(payload.event || "");
+    const context = (payload.context || payload) as Record<string, unknown>;
+
+    // Extract KeyCRM order ID from context
+    const keycrmOrderId = extractKeycrmOrderId(context, payload);
 
     logger.info("KeyCRM webhook received", {
-      eventType,
-      payloadId: payload.id,
-      statusId: payload.status_id,
-      statusName: (payload.status as Record<string, unknown>)?.name || payload.status_name,
+      event: eventName,
+      keycrmOrderId,
+      contextKeys: context ? Object.keys(context) : [],
     });
 
+    // Log the raw webhook for diagnostics (first N webhooks help debug structure)
+    await IntegrationLogRepository.create({
+      integration: "keycrm",
+      direction: "inbound",
+      method: "WEBHOOK",
+      endpoint: ENDPOINT,
+      entityType: "webhook_raw",
+      entityId: keycrmOrderId || undefined,
+      responseStatus: 200,
+      requestBody: sanitizePayloadForLog(payload),
+    });
+
+    // --- Route by event name ---
+    const eventType = classifyEvent(eventName);
+
     switch (eventType) {
-      case "order_status":
-        return await handleOrderStatusChange(payload);
+      case "order":
+        return await handleOrderEvent(keycrmOrderId, eventName);
       case "payment":
-        return await handlePaymentEvent(payload);
+        return await handlePaymentEvent(keycrmOrderId, eventName);
       default:
-        return await handleUnknownEvent(payload, eventType);
+        return await handleUnsupportedEvent(eventName, keycrmOrderId);
     }
   } catch (error) {
     logger.error("Webhook processing error", {
@@ -65,9 +84,9 @@ export async function POST(request: NextRequest) {
       direction: "inbound",
       method: "WEBHOOK",
       endpoint: ENDPOINT,
-      entityType: "unknown",
+      entityType: "error",
       errorMessage: error instanceof Error ? error.message : String(error),
-      requestBody: JSON.stringify(payload).substring(0, 4000),
+      requestBody: sanitizePayloadForLog(payload),
     });
 
     // Return 200 to prevent KeyCRM from retrying on our internal errors
@@ -76,51 +95,74 @@ export async function POST(request: NextRequest) {
 }
 
 // ---------------------------------------------------------------------------
-// Event detection
+// Helpers
 // ---------------------------------------------------------------------------
 
-type WebhookEventType = "order_status" | "payment" | "unknown";
+/** Extract KeyCRM order ID from various payload shapes */
+function extractKeycrmOrderId(context: Record<string, unknown>, payload: Record<string, unknown>): string {
+  // context.id is the most common location
+  const id = context?.id || context?.order_id || payload.id || payload.order_id || "";
+  return String(id);
+}
 
-function detectEventType(payload: Record<string, unknown>): WebhookEventType {
-  // KeyCRM order status webhook: has status_id or status object with name
+/** Sanitize payload for logging — remove sensitive fields, trim length */
+function sanitizePayloadForLog(payload: Record<string, unknown>): string {
+  try {
+    const safe = { ...payload };
+    // Remove potentially sensitive nested data
+    if (safe.context && typeof safe.context === "object") {
+      const ctx = { ...(safe.context as Record<string, unknown>) };
+      // Keep structure but truncate large nested objects
+      for (const key of Object.keys(ctx)) {
+        if (typeof ctx[key] === "object" && ctx[key] !== null) {
+          const nested = ctx[key] as Record<string, unknown>;
+          // Keep id/name/status fields, summarize the rest
+          ctx[key] = { _keys: Object.keys(nested), id: nested.id, name: nested.name, status: nested.status };
+        }
+      }
+      safe.context = ctx;
+    }
+    return JSON.stringify(safe).substring(0, 4000);
+  } catch {
+    return JSON.stringify({ error: "failed to serialize" });
+  }
+}
+
+/** Classify event name into a category */
+type EventCategory = "order" | "payment" | "unsupported";
+
+function classifyEvent(eventName: string): EventCategory {
+  const lower = eventName.toLowerCase();
+
+  // Order events
   if (
-    payload.status_id !== undefined ||
-    (payload.status && typeof payload.status === "object" && "name" in (payload.status as object))
+    lower.includes("order") ||
+    lower.includes("status") ||
+    lower.includes("замовлення") ||
+    lower === "" // Empty event name — treat as order update (legacy/default)
   ) {
-    // Distinguish order-status from payment-status
-    // Payment events typically have amount/payment_status/transaction fields
-    if (payload.payment_status !== undefined || payload.transaction_id !== undefined) {
+    // Check if it's specifically a payment sub-event on an order
+    if (lower.includes("payment") || lower.includes("invoice")) {
       return "payment";
     }
-    return "order_status";
+    return "order";
   }
 
-  // Payment-specific payload
-  if (
-    payload.payment_status !== undefined ||
-    payload.amount !== undefined ||
-    payload.transaction_id !== undefined ||
-    payload.invoice_id !== undefined
-  ) {
+  // Payment events
+  if (lower.includes("payment") || lower.includes("invoice") || lower.includes("оплат")) {
     return "payment";
   }
 
-  return "unknown";
+  return "unsupported";
 }
 
 // ---------------------------------------------------------------------------
-// Order status change handler
+// Order event handler (trigger + fetch from API)
 // ---------------------------------------------------------------------------
 
-async function handleOrderStatusChange(payload: Record<string, unknown>) {
-  const keycrmOrderId = String(payload.id || payload.order_id || "");
-  const statusPayload = payload.status as Record<string, unknown> | undefined;
-  const statusId = (payload.status_id as number) || (statusPayload?.id as number);
-  const statusName = (statusPayload?.name as string) || (payload.status_name as string) || "";
-  const trackingCode = (payload.tracking_code as string) || (payload.ttn as string) || null;
-
+async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
   if (!keycrmOrderId) {
-    logger.warn("Webhook: no order ID in payload");
+    logger.warn("Webhook: no order ID in payload", { event: eventName });
     return NextResponse.json({ status: "ok", skipped: true, reason: "no_order_id" });
   }
 
@@ -130,7 +172,7 @@ async function handleOrderStatusChange(payload: Record<string, unknown>) {
   });
 
   if (!order) {
-    logger.warn("Webhook: order not found locally", { keycrmOrderId });
+    logger.warn("Webhook: order not found locally", { keycrmOrderId, event: eventName });
     await IntegrationLogRepository.create({
       integration: "keycrm",
       direction: "inbound",
@@ -139,78 +181,92 @@ async function handleOrderStatusChange(payload: Record<string, unknown>) {
       entityType: "order",
       entityId: keycrmOrderId,
       errorMessage: "Order not found locally",
-      requestBody: JSON.stringify(payload).substring(0, 4000),
     });
     return NextResponse.json({ status: "ok", skipped: true, reason: "order_not_found" });
   }
 
+  // --- Fetch full order from KeyCRM API ---
+  const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
+  if (!keycrmOrder) {
+    logger.warn("Webhook: failed to fetch order from KeyCRM API", { keycrmOrderId });
+    return NextResponse.json({ status: "ok", skipped: true, reason: "api_fetch_failed" });
+  }
+
+  // --- Extract status, tracking, payment from API response ---
+  const statusObj = keycrmOrder.status as Record<string, unknown> | undefined;
+  const keycrmStatusName: string = String(statusObj?.name || keycrmOrder.status_name || "");
+  const keycrmStatusId: number | undefined = (keycrmOrder.status_id as number) || (statusObj?.id as number);
+  const trackingCode: string | null = (keycrmOrder.tracking_code as string) || (keycrmOrder.ttn as string) || null;
+
   // Map to one of 6 global public statuses
-  const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName);
+  const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName);
   const oldPublicStatus = order.status;
 
-  // Idempotency: skip if same public status AND same KeyCRM sub-status
-  if (oldPublicStatus === newPublicStatus && order.keycrmStatusName === statusName) {
-    logger.info("Webhook: status unchanged, skipping", {
+  // Idempotency: skip if same public status AND same KeyCRM sub-status AND same tracking
+  if (
+    oldPublicStatus === newPublicStatus &&
+    order.keycrmStatusName === keycrmStatusName &&
+    (order.trackingNumber || null) === trackingCode
+  ) {
+    logger.info("Webhook: no changes detected, skipping", {
       orderId: order.id,
       status: newPublicStatus,
-      keycrmStatus: statusName,
+      keycrmStatus: keycrmStatusName,
     });
     return NextResponse.json({ status: "ok", unchanged: true });
   }
 
   // Build update data
-  const updateData: Record<string, unknown> = {
-    status: newPublicStatus,
-    keycrmStatusId: statusId || null,
-    keycrmStatusName: statusName,
-  };
-
+  const updateData: Record<string, unknown> = {};
   const historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }> = [];
 
-  // Order status change history
-  if (oldPublicStatus !== newPublicStatus) {
-    const statusLabels: Record<string, string> = {
-      new: "Нове", approval: "Погодження", production: "Виробництво",
-      delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
-    };
-    const label = statusLabels[newPublicStatus] || statusName;
+  // --- Order status change ---
+  if (oldPublicStatus !== newPublicStatus || order.keycrmStatusName !== keycrmStatusName) {
+    updateData.status = newPublicStatus;
+    updateData.keycrmStatusId = keycrmStatusId || null;
+    updateData.keycrmStatusName = keycrmStatusName;
+
+    if (oldPublicStatus !== newPublicStatus) {
+      const statusLabels: Record<string, string> = {
+        new: "Нове", approval: "Погодження", production: "Виробництво",
+        delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+      };
+      historyEntries.push({
+        source: "keycrm_webhook",
+        oldStatus: oldPublicStatus,
+        newStatus: newPublicStatus,
+        message: `Статус змінено: ${statusLabels[newPublicStatus] || keycrmStatusName}`,
+      });
+    }
+  }
+
+  // --- Delivery status updates ---
+  if (newPublicStatus === "delivery" && order.deliveryStatus !== "shipped") {
+    updateData.deliveryStatus = "shipped";
+    if (!order.shippedAt) updateData.shippedAt = new Date();
     historyEntries.push({
-      source: "keycrm_webhook",
-      oldStatus: oldPublicStatus,
-      newStatus: newPublicStatus,
-      message: `Статус змінено: ${label}`,
+      source: "delivery",
+      oldStatus: order.deliveryStatus || "pending",
+      newStatus: "shipped",
+      message: trackingCode
+        ? `Замовлення передано в доставку. ТТН: ${trackingCode}`
+        : "Замовлення передано в доставку",
+    });
+  }
+  if (newPublicStatus === "completed" && order.deliveryStatus !== "delivered") {
+    updateData.deliveryStatus = "delivered";
+    if (!order.deliveredAt) updateData.deliveredAt = new Date();
+    historyEntries.push({
+      source: "delivery",
+      oldStatus: order.deliveryStatus || "pending",
+      newStatus: "delivered",
+      message: "Замовлення доставлено",
     });
   }
 
-  if (newPublicStatus === "delivery") {
-    updateData.deliveryStatus = "shipped";
-    if (!order.shippedAt) {
-      updateData.shippedAt = new Date();
-      historyEntries.push({
-        source: "delivery",
-        oldStatus: order.deliveryStatus || "pending",
-        newStatus: "shipped",
-        message: trackingCode
-          ? `Замовлення передано в доставку. ТТН: ${trackingCode}`
-          : "Замовлення передано в доставку",
-      });
-    }
-  }
-  if (newPublicStatus === "completed") {
-    updateData.deliveryStatus = "delivered";
-    if (!order.deliveredAt) {
-      updateData.deliveredAt = new Date();
-      historyEntries.push({
-        source: "delivery",
-        oldStatus: order.deliveryStatus || "pending",
-        newStatus: "delivered",
-        message: "Замовлення доставлено",
-      });
-    }
-  }
+  // --- Tracking number update ---
   if (trackingCode && trackingCode !== order.trackingNumber) {
     updateData.trackingNumber = trackingCode;
-    // Only add TTN history if not already added by delivery block above
     if (!historyEntries.some((h) => h.message.includes("ТТН"))) {
       historyEntries.push({
         source: "delivery",
@@ -221,16 +277,17 @@ async function handleOrderStatusChange(payload: Record<string, unknown>) {
     }
   }
 
-  await prisma.order.update({ where: { id: order.id }, data: updateData });
+  // --- Apply updates ---
+  if (Object.keys(updateData).length > 0) {
+    await prisma.order.update({ where: { id: order.id }, data: updateData });
+  }
 
-  // Write all history entries
   for (const entry of historyEntries) {
     await prisma.orderStatusHistory.create({
       data: { orderId: order.id, ...entry },
     });
   }
 
-  // Integration log
   await IntegrationLogRepository.create({
     integration: "keycrm",
     direction: "inbound",
@@ -241,29 +298,30 @@ async function handleOrderStatusChange(payload: Record<string, unknown>) {
     responseStatus: 200,
   });
 
-  logger.info("Webhook: order status updated", {
+  logger.info("Webhook: order updated", {
     orderId: order.id,
     orderNumber: order.orderNumber,
+    event: eventName,
     oldStatus: oldPublicStatus,
     newStatus: newPublicStatus,
-    keycrmStatus: statusName,
+    keycrmStatus: keycrmStatusName,
+    trackingCode,
+    historyCount: historyEntries.length,
   });
 
-  return NextResponse.json({ status: "ok", updated: true, publicStatus: newPublicStatus });
+  return NextResponse.json({
+    status: "ok",
+    updated: Object.keys(updateData).length > 0,
+    publicStatus: newPublicStatus,
+  });
 }
 
 // ---------------------------------------------------------------------------
 // Payment event handler
 // ---------------------------------------------------------------------------
 
-async function handlePaymentEvent(payload: Record<string, unknown>) {
-  const keycrmOrderId = String(payload.id || payload.order_id || "");
-
-  logger.info("Webhook: payment event received", {
-    keycrmOrderId,
-    paymentStatus: payload.payment_status,
-    amount: payload.amount,
-  });
+async function handlePaymentEvent(keycrmOrderId: string, eventName: string) {
+  logger.info("Webhook: payment event received", { keycrmOrderId, event: eventName });
 
   await IntegrationLogRepository.create({
     integration: "keycrm",
@@ -273,50 +331,51 @@ async function handlePaymentEvent(payload: Record<string, unknown>) {
     entityType: "payment",
     entityId: keycrmOrderId || undefined,
     responseStatus: 200,
-    requestBody: JSON.stringify(payload).substring(0, 4000),
   });
 
-  // If we have enough data, try to update payment status
-  if (keycrmOrderId && payload.payment_status) {
-    const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
-    if (order) {
-      const paymentStatusMap: Record<string, string> = {
-        paid: "paid",
-        partially_paid: "partial_paid",
-        not_paid: "pending",
-        refunded: "refunded",
-        cancelled: "cancelled",
-      };
-      const paymentHistoryLabels: Record<string, string> = {
-        paid: "Замовлення оплачено",
-        partial_paid: "Передплату отримано",
-        pending: "Оплата очікується",
-        refunded: "Кошти повернено",
-        cancelled: "Платіж скасовано",
-      };
-      const mappedStatus = paymentStatusMap[String(payload.payment_status)];
-      if (mappedStatus && mappedStatus !== order.paymentStatus) {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { paymentStatus: mappedStatus },
-        });
+  // If we have an order ID, fetch from API to get payment info
+  if (keycrmOrderId) {
+    const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
+    if (keycrmOrder) {
+      const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
+      if (order) {
+        const paymentStatus = keycrmOrder.payment_status;
+        const paymentStatusMap: Record<string, string> = {
+          paid: "paid",
+          partially_paid: "partial_paid",
+          not_paid: "pending",
+          refunded: "refunded",
+          cancelled: "cancelled",
+        };
+        const paymentHistoryLabels: Record<string, string> = {
+          paid: "Замовлення оплачено",
+          partial_paid: "Передплату отримано",
+          pending: "Оплата очікується",
+          refunded: "Кошти повернено",
+          cancelled: "Платіж скасовано",
+        };
+        const mappedStatus = paymentStatusMap[String(paymentStatus)];
+        if (mappedStatus && mappedStatus !== order.paymentStatus) {
+          await prisma.order.update({
+            where: { id: order.id },
+            data: { paymentStatus: mappedStatus },
+          });
+          await prisma.orderStatusHistory.create({
+            data: {
+              orderId: order.id,
+              source: "payment_callback",
+              oldStatus: order.paymentStatus,
+              newStatus: mappedStatus,
+              message: paymentHistoryLabels[mappedStatus] || `Статус оплати: ${mappedStatus}`,
+            },
+          }).catch(() => { /* non-critical */ });
 
-        // Record payment status change in history
-        await prisma.orderStatusHistory.create({
-          data: {
+          logger.info("Webhook: payment status updated via API", {
             orderId: order.id,
-            source: "payment_callback",
-            oldStatus: order.paymentStatus,
-            newStatus: mappedStatus,
-            message: paymentHistoryLabels[mappedStatus] || `Статус оплати: ${mappedStatus}`,
-          },
-        }).catch(() => { /* non-critical */ });
-
-        logger.info("Webhook: payment status updated", {
-          orderId: order.id,
-          oldPaymentStatus: order.paymentStatus,
-          newPaymentStatus: mappedStatus,
-        });
+            oldPaymentStatus: order.paymentStatus,
+            newPaymentStatus: mappedStatus,
+          });
+        }
       }
     }
   }
@@ -325,21 +384,54 @@ async function handlePaymentEvent(payload: Record<string, unknown>) {
 }
 
 // ---------------------------------------------------------------------------
-// Unknown event handler
+// Unsupported event handler
 // ---------------------------------------------------------------------------
 
-async function handleUnknownEvent(payload: Record<string, unknown>, eventType: string) {
-  logger.info("Webhook: unknown/unsupported event", { eventType, keys: Object.keys(payload) });
+async function handleUnsupportedEvent(eventName: string, keycrmOrderId: string) {
+  logger.info("Webhook: unsupported event type", { event: eventName, keycrmOrderId });
 
   await IntegrationLogRepository.create({
     integration: "keycrm",
     direction: "inbound",
     method: "WEBHOOK",
     endpoint: ENDPOINT,
-    entityType: "unknown",
-    requestBody: JSON.stringify(payload).substring(0, 4000),
+    entityType: "unsupported",
+    entityId: keycrmOrderId || undefined,
     responseStatus: 200,
   });
 
-  return NextResponse.json({ status: "ok", event: "unknown", skipped: true });
+  return NextResponse.json({ status: "ok", event: eventName, skipped: true });
+}
+
+// ---------------------------------------------------------------------------
+// KeyCRM API: fetch order
+// ---------------------------------------------------------------------------
+
+async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, unknown> | null> {
+  const apiKey = process.env.KEYCRM_API_KEY;
+  const baseUrl = (process.env.KEYCRM_BASE_URL || "https://openapi.keycrm.app/v1").trim().replace(/\/+$/, "");
+
+  if (!apiKey) {
+    logger.warn("Webhook: KEYCRM_API_KEY not set, cannot fetch order");
+    return null;
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/order/${keycrmOrderId}`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      logger.warn("Webhook: KeyCRM API fetch failed", { keycrmOrderId, httpStatus: res.status });
+      return null;
+    }
+
+    return await res.json();
+  } catch (e) {
+    logger.error("Webhook: KeyCRM API request error", {
+      keycrmOrderId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
 }

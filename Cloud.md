@@ -239,17 +239,33 @@ https://wwwnesterchukanatoliycom-production.up.railway.app/api/webhooks/keycrm/o
 
 **Events configured in KeyCRM:** order status change. Additional payment/invoice events may also arrive.
 
+**KeyCRM webhook payload structure:**
+```json
+{
+  "event": "order.status_changed",
+  "context": { "id": 3911, ... }
+}
+```
+Top-level keys are `event` (string) and `context` (object with at least `id`).
+
+**Strategy:** webhook is used as a **trigger** — handler extracts `context.id` (KeyCRM order ID), then fetches the full order via `GET /order/{id}` from KeyCRM API to get current status, tracking, and payment data. This ensures we always have complete, up-to-date information regardless of what the webhook payload contains.
+
 **Event handling:**
 
-| Event type | Detection | Behavior |
+| Event name pattern | Classification | Behavior |
 |-----------|-----------|----------|
-| Order status change | `status_id` or `status.name` present | Maps to 6 global statuses → updates Order + OrderStatusHistory |
-| Payment event | `payment_status` / `transaction_id` / `invoice_id` present | Tries to update `paymentStatus` if data sufficient; otherwise logs and returns 200 |
-| Unknown event | Neither of the above | Logs payload summary in IntegrationLog, returns 200 |
+| `order.*`, `status.*`, empty | Order event | Fetch order from API → map status → update Order + OrderStatusHistory + delivery/TTN |
+| `payment.*`, `invoice.*` | Payment event | Fetch order from API → update `paymentStatus` if changed |
+| Anything else | Unsupported | Log in IntegrationLog, return 200 |
 
-**Idempotency:** duplicate webhook with the same status does NOT create duplicate history entries.
+**Idempotency:** duplicate webhook with the same status does NOT create duplicate history entries. Checks both public status AND KeyCRM sub-status name AND tracking number.
 
 **Error handling:** handler never returns 500 to KeyCRM. Internal errors are logged and return 200 to prevent retry storms.
+
+**Refund labels:** If payment was previously `paid`/`partial_paid` and a refund comes:
+- Shows "Кошти повернено" (not "Помилка оплати")
+- If prepayment was received then refunded: "Передплату скасовано / кошти повернено"
+- "Оплата не пройшла" used ONLY when card was declined before any charge
 
 ### Backward-compatible aliases
 
@@ -292,10 +308,14 @@ POST /api/cron/keycrm-status-sync?secret=CRON_SECRET
 
 ### Smoke Test: KeyCRM Status Sync
 
-1. **Webhook test:** Change order status in KeyCRM → check Railway logs for `KeyCRM:Webhook:OrderStatus` → verify status updated in customer account
-2. **Duplicate webhook:** Send same status change again → logs show "status unchanged, skipping", no duplicate history
-3. **Unknown payload:** Send arbitrary JSON to webhook URL → returns 200, logged in IntegrationLog, no 500
-4. **Cron test:** `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"` → returns `{processed, updated, errors}`
+1. **Webhook test:** Change order status in KeyCRM → check Railway logs for `KeyCRM:Webhook:OrderStatus` event classification → verify `"Webhook: order updated"` in logs → check customer account shows new status
+2. **Duplicate webhook:** Send same status change again → logs show `"no changes detected, skipping"`, no duplicate history
+3. **Unsupported event:** Send arbitrary JSON to webhook URL → returns 200, logged as `unsupported` in IntegrationLog, no 500
+4. **TTN test:** Add tracking number in KeyCRM → webhook triggers → customer account shows ТТН block + history entry
+5. **Refund test:** Refund a previously paid order → customer sees "Кошти повернено" (not "Помилка оплати")
+6. **Prepayment refund:** Refund a COD prepayment that was received → shows "Передплату скасовано / кошти повернено" (not "Передплата не пройшла")
+7. **Cron test:** `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"` → returns `{processed, updated, errors}`
+8. **Verify logs:** Railway logs should show `event: "order.status_changed"` (not `eventType: "unknown"`)
 
 ---
 
