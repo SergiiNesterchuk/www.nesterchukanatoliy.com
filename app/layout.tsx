@@ -49,11 +49,11 @@ export default function RootLayout({
           {`window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments)};`}
         </Script>
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-SPHFK5YCCF"
+          src="https://www.googletagmanager.com/gtag/js?id=G-Q96TP2EW2C"
           strategy="afterInteractive"
         />
         <Script id="ga-init" strategy="afterInteractive">
-          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-SPHFK5YCCF',{page_path:window.location.pathname});`}
+          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Q96TP2EW2C',{page_path:window.location.pathname});`}
         </Script>
       </body>
     </html>
