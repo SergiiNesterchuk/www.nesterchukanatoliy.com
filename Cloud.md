@@ -60,7 +60,7 @@ Not just `host:port`. Use Railway variable reference `${{Postgres.DATABASE_PUBLI
 | `KEYCRM_API_KEY` | API bearer token | Change KeyCRM account/key |
 | `KEYCRM_BASE_URL` | API endpoint (default: `https://openapi.keycrm.app/v1`) | Never (unless KeyCRM changes API) |
 | `KEYCRM_SOURCE_ID` | Source ID for orders (default: `1`) | Change sales channel in KeyCRM |
-| `KEYCRM_NOVA_POSHTA_SERVICE_ID` | Nova Poshta delivery service ID in KeyCRM | `4` (check KeyCRM → Settings → Delivery) |
+| `KEYCRM_NOVA_POSHTA_SERVICE_ID` | Nova Poshta delivery service ID in KeyCRM | `5` (default, check KeyCRM → Settings → Delivery) |
 | `KEYCRM_WEBHOOK_SECRET` | Auth secret for incoming KeyCRM webhooks | Rotate security or change webhook URL |
 
 ### WayForPay

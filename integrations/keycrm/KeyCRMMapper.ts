@@ -135,8 +135,9 @@ export class KeyCRMMapper {
     }
 
     // Nova Poshta warehouse Ref — requires delivery_service_id in KeyCRM
-    const npServiceId = process.env.KEYCRM_NOVA_POSHTA_SERVICE_ID;
-    if (order.deliveryBranchRef && npServiceId) {
+    // Changed default shipping_type_id from 4 to 5 (correct Nova Poshta account)
+    const npServiceId = process.env.KEYCRM_NOVA_POSHTA_SERVICE_ID || "5";
+    if (order.deliveryBranchRef) {
       shipping.warehouse_ref = order.deliveryBranchRef;
       shipping.delivery_service_id = parseInt(npServiceId, 10);
     }
