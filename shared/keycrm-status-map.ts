@@ -15,14 +15,19 @@ export type PublicOrderStatus = "new" | "approval" | "production" | "delivery" |
  * Known IDs (from production webhook logs, verified empirically):
  *   1  = Новий (new)                        — group 1
  *   20 = Прийнято (approval)                — group 2
- *   5  = Виробництво (production)           — group 3 (needs verification)
+ *   5  = Виробництво (production)           — group 3
  *   8  = Передано в доставку (delivery)     — group 4, confirmed by TTN test
- *   19 = Доставка (delivery)                — group 4 (needs verification)
- *   12 = Виконано (completed)               — group 5 (needs verification)
+ *   9  = delivery sub-status                — group 4, from production logs
+ *   11 = delivery sub-status                — group 4, from production logs
+ *   19 = Доставка (delivery)                — group 4
+ *   12 = Виконано (completed)               — group 5
  *
  * Cancelled: status_id NOT YET KNOWN — do NOT guess.
  * When a real cancellation is tested, add the correct ID here.
  * Until then, cancelled is matched only by status name keywords or group 6.
+ *
+ * SAFETY: status_group_id=4 can NEVER produce "cancelled" — enforced in
+ * mapKeycrmToPublicStatus() as a hard override.
  *
  * To discover all IDs: GET /api/admin/keycrm-statuses
  */
@@ -30,8 +35,10 @@ export const KEYCRM_STATUS_ID_MAP: Record<number, PublicOrderStatus> = {
   1: "new",
   20: "approval",
   5: "production",
-  8: "delivery",    // Передано в доставку (was incorrectly "cancelled")
-  19: "delivery",
+  8: "delivery",    // Передано в доставку — group 4
+  9: "delivery",    // delivery sub-status — group 4
+  11: "delivery",   // delivery sub-status — group 4
+  19: "delivery",   // Доставка — group 4
   12: "completed",
   // cancelled: ID unknown — mapped via name keywords or status_group_id=6
 };
@@ -117,28 +124,36 @@ export function mapKeycrmToPublicStatus(
   statusName?: string,
   statusGroupId?: number,
 ): PublicOrderStatus | undefined {
+  let result: PublicOrderStatus | undefined;
+
   // 1. Exact status_id match
   if (statusId && KEYCRM_STATUS_ID_MAP[statusId]) {
-    return KEYCRM_STATUS_ID_MAP[statusId];
+    result = KEYCRM_STATUS_ID_MAP[statusId];
   }
 
   // 2. Status name keyword match
-  if (statusName) {
+  if (!result && statusName) {
     const lower = statusName.toLowerCase();
     for (const rule of KEYCRM_STATUS_NAME_RULES) {
       if (rule.keywords.some((kw) => lower.includes(kw))) {
-        return rule.status;
+        result = rule.status;
+        break;
       }
     }
   }
 
   // 3. Status group_id fallback
-  if (statusGroupId && KEYCRM_STATUS_GROUP_MAP[statusGroupId]) {
-    return KEYCRM_STATUS_GROUP_MAP[statusGroupId];
+  if (!result && statusGroupId && KEYCRM_STATUS_GROUP_MAP[statusGroupId]) {
+    result = KEYCRM_STATUS_GROUP_MAP[statusGroupId];
   }
 
-  // 4. Unknown — return undefined so caller preserves current status
-  return undefined;
+  // Safety: status_group_id=4 (delivery group) can NEVER be "cancelled".
+  // If any mapping step returned "cancelled" but group is delivery, override.
+  if (result === "cancelled" && statusGroupId === 4) {
+    result = "delivery";
+  }
+
+  return result;
 }
 
 /** Human-readable labels for public statuses (Ukrainian) */
