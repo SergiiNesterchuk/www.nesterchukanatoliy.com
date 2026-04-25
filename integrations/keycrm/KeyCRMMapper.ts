@@ -164,17 +164,29 @@ export class KeyCRMMapper {
     keycrmOrder.manager_comment = buildDeliveryComment(order);
 
     // Payment records for KeyCRM
+    const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
+    const orderNum = order.orderNumber;
+
     if (order.paymentStatus === "paid") {
-      // Full card payment — use payment_method_id for precise KeyCRM mapping
-      const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
+      // Повна оплата отримана
       keycrmOrder.payments = [
         {
           ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: this.mapPaymentMethod(order.paymentMethod) }),
           amount: Number(toHryvni(order.total)) || 0,
           status: "paid",
           description: order.externalPaymentId
-            ? `WayForPay: ${order.externalPaymentId}`
-            : "Оплата карткою",
+            ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+            : `Оплата карткою. Замовлення сайту: ${orderNum}`,
+        },
+      ];
+    } else if (order.paymentMethod === "card_online" && ["pending", "awaiting_prepayment"].includes(order.paymentStatus)) {
+      // Інвойс створено, але ще не оплачено — зберігаємо в KeyCRM як not_paid
+      keycrmOrder.payments = [
+        {
+          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: this.mapPaymentMethod(order.paymentMethod) }),
+          amount: Number(toHryvni(order.total)) || 0,
+          status: "not_paid",
+          description: `WayForPay інвойс створено. Замовлення сайту: ${orderNum}. Очікує оплати.`,
         },
       ];
     } else if (order.paymentStatus === "partial_paid" && order.prepaymentAmount) {
