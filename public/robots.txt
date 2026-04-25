@@ -3,5 +3,7 @@ Allow: /
 Disallow: /admin/
 Disallow: /api/
 Disallow: /checkout/
+Disallow: /cart/
+Disallow: /account/
 
 Sitemap: https://nesterchukanatoliy.com/api/sitemap.xml
