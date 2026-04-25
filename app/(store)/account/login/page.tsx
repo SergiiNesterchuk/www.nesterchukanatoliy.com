@@ -11,6 +11,18 @@ export default function LoginPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Show auth error from query if redirected from error page
+  const [authError] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("error");
+      if (err === "Verification") return "Посилання для входу застаріло. Спробуйте ще раз.";
+      if (err === "OAuthCallback") return "Помилка входу через Google. Спробуйте ще раз.";
+      if (err) return `Помилка входу: ${err}`;
+    }
+    return "";
+  });
+
   const handleGoogle = () => signIn("google", { callbackUrl: "/account/orders" });
 
   const handleEmail = async (e: React.FormEvent) => {
@@ -36,6 +48,12 @@ export default function LoginPage() {
     <div className="max-w-md mx-auto px-4 py-16">
       <h1 className="text-2xl font-bold text-gray-900 text-center mb-2">Особистий кабінет</h1>
       <p className="text-gray-500 text-center mb-8">Увійдіть, щоб переглядати свої замовлення</p>
+
+      {authError && (
+        <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-700 text-center">
+          {authError}
+        </div>
+      )}
 
       <div className="space-y-4">
         <button

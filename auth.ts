@@ -20,6 +20,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID || "",
       clientSecret: process.env.GOOGLE_CLIENT_SECRET || "",
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code",
+        },
+      },
     }),
     Resend({
       apiKey: process.env.RESEND_API_KEY || "",
@@ -29,6 +36,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/account/login",
     verifyRequest: "/account/verify",
+    error: "/account/login",
   },
   callbacks: {
     session({ session, user }) {
@@ -38,5 +46,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return session;
     },
   },
+  debug: process.env.NODE_ENV === "development",
   trustHost: true,
 });
