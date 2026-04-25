@@ -6,6 +6,7 @@ import Link from "next/link";
 import { formatPrice } from "@/shared/money";
 import { Spinner } from "@/components/ui/Spinner";
 import { Package, CreditCard, Truck, Clock, XCircle, ArrowLeft } from "lucide-react";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 interface OrderDetail {
   orderNumber: string;
@@ -172,22 +173,26 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Tracking number + Nova Poshta link */}
+        {/* Tracking number + Copy + Nova Poshta link */}
         {order.trackingNumber && (
           <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 flex items-center justify-between gap-2">
-            <div>
-              <strong>ТТН:</strong> <span className="font-mono">{order.trackingNumber}</span>
+            <div className="flex items-center gap-1.5">
+              <strong>ТТН:</strong>
+              <span className="font-mono">{order.trackingNumber}</span>
+              <CopyButton text={order.trackingNumber} />
             </div>
-            {/^\d{14}$/.test(order.trackingNumber) && (
-              <a
-                href={`https://novaposhta.ua/tracking/?cargo_number=${order.trackingNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex-shrink-0"
-              >
-                Відстежити
-              </a>
-            )}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/^\d{14}$/.test(order.trackingNumber) && (
+                <a
+                  href={`https://novaposhta.ua/tracking/?cargo_number=${order.trackingNumber}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Відстежити
+                </a>
+              )}
+            </div>
           </div>
         )}
 
