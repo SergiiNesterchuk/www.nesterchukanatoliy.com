@@ -115,14 +115,16 @@ export class KeyCRMService {
           keycrmPaymentId = String(payments[0].id);
         }
 
-        // Якщо WayForPay і payments не створились — прикріпити вручну
-        if (payments.length === 0 && KeyCRMMapper.isWayForPayMethod(order.paymentMethod)) {
-          const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
-          const amountUAH = Number(order.total) / 100;
-          const isPaid = order.paymentStatus === "paid";
-          // ТІЛЬКИ payment_method_id, без payment_method string
+        // Якщо payments не створились — прикріпити вручну
+        if (payments.length === 0) {
+          const methodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod, order.paymentPurpose);
+          const isCodPrepay = order.paymentPurpose === "cod_prepayment";
+          const amountUAH = isCodPrepay && order.prepaymentAmount
+            ? Number(order.prepaymentAmount) / 100
+            : Number(order.total) / 100;
+          const isPaid = order.paymentStatus === "paid" || order.paymentStatus === "partial_paid";
           const attachPayload = {
-            ...(paymentMethodId ? { payment_method_id: paymentMethodId } : {}),
+            payment_method_id: methodId,
             amount: amountUAH,
             status: isPaid ? "paid" : "not_paid",
             description: isPaid && order.externalPaymentId
@@ -227,26 +229,23 @@ export class KeyCRMService {
       return;
     }
 
-    // Перевірити наявні оплати в KeyCRM
-    const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
-    const amountUAH = order.total / 100;
+    // Визначити правильний payment_method_id і суму
+    const isCodPrepayment = order.paymentPurpose === "cod_prepayment";
+    const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod, order.paymentPurpose);
+    const amountUAH = isCodPrepayment && order.prepaymentAmount
+      ? order.prepaymentAmount / 100
+      : order.total / 100;
     const txDescription = order.externalPaymentId
       ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
-      : `Оплата карткою. Замовлення сайту: ${orderNum}`;
+      : isCodPrepayment
+        ? `WayForPay передплата. Замовлення сайту: ${orderNum}`
+        : `Оплата карткою. Замовлення сайту: ${orderNum}`;
 
-    // HARD GUARD: для WayForPay методів payment_method_id ОБОВ'ЯЗКОВИЙ
-    if (!paymentMethodId && KeyCRMMapper.isWayForPayMethod(order.paymentMethod)) {
-      logger.error("CRITICAL: payment_method_id is undefined for WayForPay method", {
-        orderId, orderNumber: orderNum, localPaymentMethod: order.paymentMethod,
-      });
-      // Fallback: використати default ID 8
-      // Це не має відбуватися, але краще відправити з ID ніж без
-    }
-    const effectiveMethodId = paymentMethodId || (KeyCRMMapper.isWayForPayMethod(order.paymentMethod) ? 8 : undefined);
-
-    const wpMethodFields = effectiveMethodId
-      ? { payment_method_id: effectiveMethodId }
-      : {};
+    logger.info("syncPaymentToKeyCRM: payment details", {
+      orderId, orderNumber: orderNum, paymentMethodId, amountUAH,
+      isCodPrepayment, paymentPurpose: order.paymentPurpose,
+      action: "resolving",
+    });
 
     try {
       const keycrmOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; amount: number }> }>(
@@ -288,7 +287,7 @@ export class KeyCRMService {
       if (targetPayment) {
         const updatePayload = {
           status: "paid",
-          ...wpMethodFields,
+          payment_method_id: paymentMethodId,
           description: txDescription,
         };
 
@@ -326,7 +325,7 @@ export class KeyCRMService {
 
     // Case B: замовлення в KeyCRM, оплати не знайдено → прикріпити нову
     const attachPayload = {
-      ...wpMethodFields,
+      payment_method_id: paymentMethodId,
       amount: amountUAH,
       status: "paid",
       description: txDescription,

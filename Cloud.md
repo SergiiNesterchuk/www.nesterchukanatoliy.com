@@ -463,7 +463,15 @@ railway run pg_dump $DATABASE_URL > backup.sql
 | 15 | `card` | Card | Так |
 | 16 | `cash_on_delivery` | Cash_on_delivery | Так |
 
-**Для 100% онлайн-оплати WayForPay сайт використовує ID 8.**
+**Сайт використовує:**
+- **ID 8** = 100% онлайн-оплата WayForPay (full_payment)
+- **ID 12** = Передплата 200 грн WayForPay (cod_prepayment)
+- **ID 16** = Накладений платіж / COD (решта при отриманні)
+
+Env variables:
+- `KEYCRM_PAYMENT_METHOD_CARD_ID=8` (100% оплата)
+- `KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID=12` (передплата 200 грн)
+- `KEYCRM_PAYMENT_METHOD_COD_ID=16` (COD решта)
 
 ### Як отримати актуальний список методів
 
@@ -505,19 +513,30 @@ Authorization: Bearer {KEYCRM_API_KEY}
 
 ### Приклади payload
 
-**A. Unpaid WayForPay invoice (при створенні замовлення до оплати):**
+**A. 100% WayForPay — unpaid invoice:**
 ```json
-{ "payment_method_id": 8, "amount": 280, "status": "not_paid", "description": "WayForPay інвойс. Замовлення сайту: K-5017" }
+{ "payment_method_id": 8, "amount": 280, "status": "not_paid", "description": "WayForPay інвойс створено. Замовлення сайту: K-5017" }
 ```
 
-**B. Оновлення not_paid → paid (після успішної оплати):**
-```json
-{ "payment_method_id": 8, "status": "paid", "description": "WayForPay: txId123. Замовлення сайту: K-5017" }
-```
-
-**C. Нова paid оплата (fallback):**
+**B. 100% WayForPay — paid:**
 ```json
 { "payment_method_id": 8, "amount": 280, "status": "paid", "description": "WayForPay: txId123. Замовлення сайту: K-5017" }
+```
+
+**C. COD передплата 200 грн — unpaid:**
+```json
+[
+  { "payment_method_id": 12, "amount": 200, "status": "not_paid", "description": "WayForPay передплата. Замовлення сайту: K-5018" },
+  { "payment_method_id": 16, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
+]
+```
+
+**D. COD передплата 200 грн — paid:**
+```json
+[
+  { "payment_method_id": 12, "amount": 200, "status": "paid", "description": "WayForPay передплата 200 грн. WayForPay: txId456. Замовлення сайту: K-5018" },
+  { "payment_method_id": 16, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
+]
 ```
 
 ### Discovery endpoint

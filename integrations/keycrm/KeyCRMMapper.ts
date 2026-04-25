@@ -164,22 +164,18 @@ export class KeyCRMMapper {
     keycrmOrder.manager_comment = buildDeliveryComment(order);
 
     // Payment records for KeyCRM
-    const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
+    // КРИТИЧНО: передавати ТІЛЬКИ payment_method_id (число), без payment_method string
     const orderNum = order.orderNumber;
+    const isCodPrepayment = order.paymentPurpose === "cod_prepayment";
+    const fullPaymentMethodId = this.getPaymentMethodId(order.paymentMethod, order.paymentPurpose);
+    const prepaymentMethodId = this.getPaymentMethodId(order.paymentMethod, "cod_prepayment");
+    const codMethodId = parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "16", 10);
 
-    // KeyCRM API: передавати ТІЛЬКИ payment_method_id (число).
-    // Якщо передати і payment_method (string) — KeyCRM ігнорує payment_method_id
-    // і призначає ID 5 ("Other" / "Інше").
-    // Endpoint: GET /order/payment-method → ID 8 = WayForPay
-    const wpPaymentFields = paymentMethodId
-      ? { payment_method_id: paymentMethodId }
-      : {};
-
-    if (order.paymentStatus === "paid") {
-      // Повна оплата отримана
+    if (order.paymentStatus === "paid" && !isCodPrepayment) {
+      // 100% онлайн-оплата — ID 8
       keycrmOrder.payments = [
         {
-          ...wpPaymentFields,
+          payment_method_id: fullPaymentMethodId,
           amount: Number(toHryvni(order.total)) || 0,
           status: "paid",
           description: order.externalPaymentId
@@ -187,46 +183,68 @@ export class KeyCRMMapper {
             : `Оплата карткою. Замовлення сайту: ${orderNum}`,
         },
       ];
-    } else if (this.isWayForPayMethod(order.paymentMethod)) {
-      // Інвойс WayForPay створено, ще не оплачено — зберігаємо як not_paid
+    } else if (this.isWayForPayMethod(order.paymentMethod) && !isCodPrepayment) {
+      // 100% WayForPay інвойс, ще не оплачено — ID 8
       keycrmOrder.payments = [
         {
-          ...wpPaymentFields,
+          payment_method_id: fullPaymentMethodId,
           amount: Number(toHryvni(order.total)) || 0,
           status: "not_paid",
           description: `WayForPay інвойс створено. Замовлення сайту: ${orderNum}. Очікує оплати.`,
         },
       ];
     } else if (order.paymentStatus === "partial_paid" && order.prepaymentAmount) {
-      // COD with prepayment — 2 payment records
+      // COD: передплата оплачена — ID 12 для передплати, ID 16 для решти
       const prepaymentUAH = Number(toHryvni(order.prepaymentAmount)) || 0;
       const remainingUAH = Number(toHryvni(order.total - order.prepaymentAmount)) || 0;
 
       keycrmOrder.payments = [
         {
-          payment_method: "WayForPay",
+          payment_method_id: prepaymentMethodId,
           amount: prepaymentUAH,
           status: "paid",
-          description: `Передплата ${prepaymentUAH} грн${order.externalPaymentId ? ` (WayForPay: ${order.externalPaymentId})` : ""}`,
+          description: `WayForPay передплата ${prepaymentUAH} грн${order.externalPaymentId ? `. WayForPay: ${order.externalPaymentId}` : ""}. Замовлення сайту: ${orderNum}`,
         },
       ];
 
       if (remainingUAH > 0) {
         keycrmOrder.payments.push({
-          payment_method: "cash_on_delivery",
+          payment_method_id: codMethodId,
           amount: remainingUAH,
           status: "not_paid",
-          description: `Решта ${remainingUAH} грн при отриманні`,
+          description: `Решта ${remainingUAH} грн при отриманні. Замовлення сайту: ${orderNum}`,
         });
       }
-    } else if (order.paymentMethod.includes("cod") && order.paymentStatus === "cod_pending") {
-      // Legacy COD without prepayment
+    } else if (isCodPrepayment && ["awaiting_prepayment", "pending"].includes(order.paymentStatus)) {
+      // COD: передплата ще не оплачена — ID 12 для not_paid + ID 16 для решти
+      const prepaymentUAH = Number(toHryvni(order.prepaymentAmount || 0)) || 0;
+      const remainingUAH = Number(toHryvni(order.total - (order.prepaymentAmount || 0))) || 0;
+
       keycrmOrder.payments = [
         {
-          payment_method: "cash_on_delivery",
+          payment_method_id: prepaymentMethodId,
+          amount: prepaymentUAH,
+          status: "not_paid",
+          description: `WayForPay передплата. Замовлення сайту: ${orderNum}. Очікує оплати.`,
+        },
+      ];
+
+      if (remainingUAH > 0) {
+        keycrmOrder.payments.push({
+          payment_method_id: codMethodId,
+          amount: remainingUAH,
+          status: "not_paid",
+          description: `Решта ${remainingUAH} грн при отриманні. Замовлення сайту: ${orderNum}`,
+        });
+      }
+    } else if (order.paymentMethod.includes("cod")) {
+      // COD без передплати — ID 16
+      keycrmOrder.payments = [
+        {
+          payment_method_id: codMethodId,
           amount: Number(toHryvni(order.total)) || 0,
           status: "not_paid",
-          description: "Накладений платіж — оплата при отриманні",
+          description: `Накладений платіж. Замовлення сайту: ${orderNum}`,
         },
       ];
     }
@@ -249,13 +267,18 @@ export class KeyCRMMapper {
     return mapping[method] || "other";
   }
 
-  // KeyCRM payment method ID 8 = 100% online card payment via WayForPay
-  // Підтримує всі варіанти назви методу: card_online, card_wayforpay, wayforpay
-  static getPaymentMethodId(method: string): number | undefined {
+  // KeyCRM payment method IDs:
+  // ID 8 = "100% Онлайн-оплата банківською карткою (WayForPay)" — повна оплата
+  // ID 12 = "Післяплата (Передплата 200грн)" — COD передплата WayForPay
+  static getPaymentMethodId(method: string, purpose?: string | null): number {
+    if (purpose === "cod_prepayment") {
+      return parseInt(process.env.KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID || "12", 10);
+    }
     if (this.isWayForPayMethod(method)) {
       return parseInt(process.env.KEYCRM_PAYMENT_METHOD_CARD_ID || "8", 10);
     }
-    return undefined;
+    // Fallback для COD без передплати — використовуємо ID 16 (cash_on_delivery)
+    return parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "16", 10);
   }
 
   /** Перевірка чи метод оплати = WayForPay (будь-який варіант назви) */
