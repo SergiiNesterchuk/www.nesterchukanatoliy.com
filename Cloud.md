@@ -61,6 +61,7 @@ Not just `host:port`. Use Railway variable reference `${{Postgres.DATABASE_PUBLI
 | `KEYCRM_BASE_URL` | API endpoint (default: `https://openapi.keycrm.app/v1`) | Never (unless KeyCRM changes API) |
 | `KEYCRM_SOURCE_ID` | Source ID for orders (default: `1`) | Change sales channel in KeyCRM |
 | `KEYCRM_NOVA_POSHTA_SERVICE_ID` | Nova Poshta delivery service ID in KeyCRM | `4` (check KeyCRM → Settings → Delivery) |
+| `KEYCRM_WEBHOOK_SECRET` | Auth secret for incoming KeyCRM webhooks | Rotate security or change webhook URL |
 
 ### WayForPay
 
@@ -196,33 +197,105 @@ Not just `host:port`. Use Railway variable reference `${{Postgres.DATABASE_PUBLI
 
 ---
 
-## 9. KeyCRM Status Sync / Cron
+## 9. KeyCRM Status Sync (Webhook + Cron Fallback)
 
-### Why cron?
-KeyCRM is source of truth for order processing. When manager changes status in KeyCRM (e.g. "Відправлено"), local site needs to know.
+### Architecture: Webhook-first with smart cron fallback
 
-### Endpoint
+KeyCRM is source of truth for order processing. When a manager changes status in KeyCRM, the site is updated via:
+
+1. **Webhook (primary, real-time)** — KeyCRM sends POST to our endpoint immediately on status change
+2. **Cron (fallback, every 15 min)** — catches any missed webhooks or out-of-band changes
+
+Both use the same centralized mapping: `shared/keycrm-status-map.ts` → `mapKeycrmToPublicStatus()`
+
+### 6 Global Order Statuses
+
+KeyCRM may have dozens of internal sub-statuses. The site maps ALL of them to exactly 6 public statuses:
+
+| Public status | Label (UA) | KeyCRM keywords matched |
+|---------------|-----------|------------------------|
+| `new` | Нове | новий, new |
+| `approval` | Погодження | погодження, очікування, прийнято, підтверджен, confirm |
+| `production` | Виробництво | виробництво, виготов, збирається, production |
+| `delivery` | Доставка | доставка, відправлен, передано в доставку, shipped, transit |
+| `completed` | Виконано | виконано, доставлено, завершено, completed, delivered |
+| `cancelled` | Скасовано | скасовано, відмінено, недозвон, cancelled, refund |
+
+KeyCRM sub-status name is saved in `keycrmStatusName` for diagnostics but is **never shown** to the customer. Customer sees only the global status label.
+
+### Webhook Endpoint (production)
+
+```
+POST /api/webhooks/keycrm/order-status?secret=KEYCRM_WEBHOOK_SECRET
+```
+
+**Full production URL configured in KeyCRM:**
+```
+https://wwwnesterchukanatoliycom-production.up.railway.app/api/webhooks/keycrm/order-status?secret=KEYCRM_WEBHOOK_SECRET
+```
+
+**Method:** POST
+**Auth:** query param `secret` or header `x-webhook-secret` checked against `KEYCRM_WEBHOOK_SECRET` env var.
+
+**Events configured in KeyCRM:** order status change. Additional payment/invoice events may also arrive.
+
+**Event handling:**
+
+| Event type | Detection | Behavior |
+|-----------|-----------|----------|
+| Order status change | `status_id` or `status.name` present | Maps to 6 global statuses → updates Order + OrderStatusHistory |
+| Payment event | `payment_status` / `transaction_id` / `invoice_id` present | Tries to update `paymentStatus` if data sufficient; otherwise logs and returns 200 |
+| Unknown event | Neither of the above | Logs payload summary in IntegrationLog, returns 200 |
+
+**Idempotency:** duplicate webhook with the same status does NOT create duplicate history entries.
+
+**Error handling:** handler never returns 500 to KeyCRM. Internal errors are logged and return 200 to prevent retry storms.
+
+### Backward-compatible aliases
+
+| Alias endpoint | Forwards to |
+|---------------|------------|
+| `/api/webhooks/keycrm` | `/api/webhooks/keycrm/order-status` (re-export) |
+| `/api/keycrm/webhook` | `/api/webhooks/keycrm/order-status` (re-export) |
+
+These aliases exist for backward compatibility. **Do not configure new webhooks using alias URLs.**
+
+### Cron Fallback Endpoint
+
 ```
 POST /api/cron/keycrm-status-sync?secret=CRON_SECRET
 ```
 
-### What it does
-- Fetches orders with `keycrmOrderId` that are NOT in final status
-- For each: `GET /order/{id}` from KeyCRM → updates local status
-- Maps KeyCRM status names → local statuses (see `shared/order-statuses.ts`)
-- Updates tracking number if available
-- Records changes in OrderStatusHistory
+**What it does:**
+- Fetches orders with `keycrmOrderId` that are NOT in final status (`completed`, `cancelled`)
+- For each: `GET /order/{id}` from KeyCRM API → maps status via `mapKeycrmToPublicStatus()`
+- Updates local status, tracking number, delivery timestamps
+- Records changes in OrderStatusHistory with source `keycrm_cron`
+- Rate-limited: 1 KeyCRM API call per second
 
-### Final statuses (not synced)
-`completed`, `cancelled`, `returned`
+**Difference from webhook:** cron polls KeyCRM API; webhook receives push from KeyCRM. Cron is a safety net — if webhook delivery fails or KeyCRM doesn't fire the webhook, cron catches up within 15 minutes.
 
-### Setup Railway cron service
-1. Create new Railway service in same project
-2. Set cron schedule: `*/15 * * * *` (every 15 minutes)
+### Setup
+
+**Webhook (already configured in KeyCRM):**
+1. Railway variable: `KEYCRM_WEBHOOK_SECRET` — set to a random string (`openssl rand -hex 32`)
+2. KeyCRM → Settings → Webhooks → URL: `https://wwwnesterchukanatoliycom-production.up.railway.app/api/webhooks/keycrm/order-status?secret=<value>`
+3. Event: order status change
+
+**Cron fallback:**
+1. Create Railway cron service in same project
+2. Schedule: `*/15 * * * *` (every 15 min)
 3. Command: `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"`
 4. Variables: `CRON_SECRET`, `SITE_URL`
 
-**Do NOT use ADMIN_JWT_SECRET as cron secret.**
+**Do NOT use ADMIN_JWT_SECRET for webhook or cron secrets.**
+
+### Smoke Test: KeyCRM Status Sync
+
+1. **Webhook test:** Change order status in KeyCRM → check Railway logs for `KeyCRM:Webhook:OrderStatus` → verify status updated in customer account
+2. **Duplicate webhook:** Send same status change again → logs show "status unchanged, skipping", no duplicate history
+3. **Unknown payload:** Send arbitrary JSON to webhook URL → returns 200, logged in IntegrationLog, no 500
+4. **Cron test:** `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"` → returns `{processed, updated, errors}`
 
 ---
 
@@ -319,10 +392,11 @@ Cart → Checkout form → POST /api/checkout
 
 | Status field | Values | Visible to customer? |
 |-------------|--------|---------------------|
-| `status` | new, confirmed, processing, paid, shipped, delivered, completed, cancelled | Yes (Ukrainian labels) |
-| `paymentStatus` | pending, cod_pending, paid, failed, refunded, cancelled | Yes |
+| `status` | **6 global:** new, approval, production, delivery, completed, cancelled | Yes (Ukrainian labels) |
+| `paymentStatus` | pending, cod_pending, awaiting_prepayment, partial_paid, paid, failed, refunded, cancelled | Yes |
 | `deliveryStatus` | null, shipped, in_transit, delivered | Yes |
 | `keycrmSyncStatus` | pending, synced, failed | **No** (admin only) |
+| `keycrmStatusName` | Original KeyCRM sub-status name | **No** (diagnostics only) |
 | `trackingNumber` | null or NP tracking | Yes (when available) |
 
 ### Refund/Cancel Flow
@@ -614,8 +688,10 @@ Currently logs "no provider configured" without sending.
 | Sitemap | `.../api/sitemap.xml` |
 | Payment callback | `.../api/payment/callback` |
 | Payment return | `.../api/payment/return` |
-| KeyCRM webhook | `.../api/keycrm/webhook` |
-| Cron sync | `.../api/cron/keycrm-status-sync?secret=CRON_SECRET` |
+| KeyCRM webhook (production) | `.../api/webhooks/keycrm/order-status?secret=KEYCRM_WEBHOOK_SECRET` |
+| KeyCRM webhook (alias) | `.../api/webhooks/keycrm` (re-export) |
+| KeyCRM webhook (legacy alias) | `.../api/keycrm/webhook` (re-export) |
+| Cron status sync | `.../api/cron/keycrm-status-sync?secret=CRON_SECRET` |
 
 **Admin credentials:** `admin@nesterchukanatoliy.com` / `admin123` (change in production!)
 

@@ -8,9 +8,11 @@ import { ShoppingBag } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
-  new: "Нове", confirmed: "Підтверджено", processing: "В обробці",
-  paid: "Оплачено", partial_paid: "Передплата", shipped: "Відправлено",
-  delivered: "Доставлено", completed: "Виконано", cancelled: "Скасовано",
+  new: "Нове", approval: "Погодження", production: "Виробництво",
+  delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+  // Legacy
+  confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
+  partial_paid: "Передплата", shipped: "Відправлено", delivered: "Доставлено",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -22,7 +24,8 @@ function badge(value: string, labels: Record<string, string>) {
   const text = labels[value] || value;
   const color = ["paid", "completed", "delivered", "partial_paid"].includes(value)
     ? "bg-green-50 text-green-700" : ["failed", "cancelled", "refunded"].includes(value)
-    ? "bg-red-50 text-red-700" : "bg-yellow-50 text-yellow-700";
+    ? "bg-red-50 text-red-700" : ["delivery", "shipped", "production"].includes(value)
+    ? "bg-blue-50 text-blue-700" : "bg-yellow-50 text-yellow-700";
   return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{text}</span>;
 }
 

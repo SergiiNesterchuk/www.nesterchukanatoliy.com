@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/shared/db";
 import { createLogger } from "@/shared/logger";
-import { mapKeycrmStatus } from "@/shared/order-statuses";
+import { mapKeycrmToPublicStatus } from "@/shared/keycrm-status-map";
+import { IntegrationLogRepository } from "@/repositories/IntegrationLogRepository";
 
 const logger = createLogger("KeyCRMStatusSync");
 
@@ -57,22 +58,22 @@ export async function POST(request: NextRequest) {
         const keycrmStatusName = keycrmOrder.status?.name || keycrmOrder.status_name || "";
         const keycrmStatusId = keycrmOrder.status_id || keycrmOrder.status?.id;
         const trackingNumber = keycrmOrder.tracking_code || keycrmOrder.ttn || null;
-        const newLocalStatus = mapKeycrmStatus(keycrmStatusName);
+        const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName);
 
-        // Only update if status changed
-        if (newLocalStatus !== order.status || trackingNumber) {
+        // Only update if status changed or tracking number arrived
+        if (newPublicStatus !== order.status || trackingNumber) {
           const updateData: Record<string, unknown> = {};
 
-          if (newLocalStatus !== order.status) {
-            updateData.status = newLocalStatus;
+          if (newPublicStatus !== order.status) {
+            updateData.status = newPublicStatus;
             updateData.keycrmStatusId = keycrmStatusId;
             updateData.keycrmStatusName = keycrmStatusName;
 
-            if (newLocalStatus === "shipped" && !order.status.includes("shipped")) {
+            if (newPublicStatus === "delivery") {
               updateData.deliveryStatus = "shipped";
-              updateData.shippedAt = new Date();
+              if (!order.status.includes("delivery")) updateData.shippedAt = new Date();
             }
-            if (newLocalStatus === "completed") {
+            if (newPublicStatus === "completed") {
               updateData.deliveryStatus = "delivered";
               updateData.deliveredAt = new Date();
             }
@@ -81,9 +82,9 @@ export async function POST(request: NextRequest) {
             await prisma.orderStatusHistory.create({
               data: {
                 orderId: order.id,
-                source: "keycrm",
+                source: "keycrm_cron",
                 oldStatus: order.status,
-                newStatus: newLocalStatus,
+                newStatus: newPublicStatus,
                 message: `KeyCRM: ${keycrmStatusName}`,
               },
             });
@@ -100,7 +101,7 @@ export async function POST(request: NextRequest) {
               orderId: order.id,
               orderNumber: order.orderNumber,
               oldStatus: order.status,
-              newStatus: newLocalStatus,
+              newStatus: newPublicStatus,
               keycrmStatus: keycrmStatusName,
               trackingNumber,
             });

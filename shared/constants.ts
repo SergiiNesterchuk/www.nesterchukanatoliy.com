@@ -33,13 +33,17 @@ export type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
 export const ORDER_STATUSES = {
   new: "Нове",
+  approval: "Погодження",
+  production: "Виробництво",
+  delivery: "Доставка",
+  completed: "Виконано",
+  cancelled: "Скасовано",
+  // Legacy statuses (backward compat for old orders)
   confirmed: "Підтверджено",
   paid: "Оплачено",
   processing: "В обробці",
   shipped: "Відправлено",
   delivered: "Доставлено",
-  completed: "Виконано",
-  cancelled: "Скасовано",
   returned: "Повернено",
 } as const;
 

@@ -9,9 +9,11 @@ import { RepeatOrderButton } from "./RepeatOrderButton";
 export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
-  new: "Замовлення створено", confirmed: "Підтверджено", processing: "В обробці",
-  paid: "Оплачено", partial_paid: "Передплата отримана", shipped: "Відправлено",
-  delivered: "Доставлено", completed: "Виконано", cancelled: "Скасовано",
+  new: "Замовлення створено", approval: "Погодження", production: "Виробництво",
+  delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+  // Legacy
+  confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
+  partial_paid: "Передплата отримана", shipped: "Відправлено", delivered: "Доставлено",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
@@ -23,7 +25,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 function statusColor(s: string) {
   if (["paid", "completed", "delivered", "partial_paid"].includes(s)) return "text-green-600 bg-green-50";
   if (["cancelled", "failed", "refunded"].includes(s)) return "text-red-600 bg-red-50";
-  if (["shipped", "processing"].includes(s)) return "text-blue-600 bg-blue-50";
+  if (["delivery", "shipped", "production", "processing"].includes(s)) return "text-blue-600 bg-blue-50";
   return "text-yellow-600 bg-yellow-50";
 }
 
