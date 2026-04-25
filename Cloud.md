@@ -427,6 +427,64 @@ railway run pg_dump $DATABASE_URL > backup.sql
 
 ---
 
+## 12a. KeyCRM Payment API Mapping
+
+**Endpoint для списку методів оплати:** `GET /order/payment-method`
+
+**Активні методи оплати (verified via API, April 2026):**
+
+| ID | Alias | Назва | Активний |
+|----|-------|-------|----------|
+| 3 | `oplata_na_raxunok` | Оплата на рахунок | Так |
+| 8 | `100_onlain_oplata_bankivskoyu_kartkoyu_wayforpay` | 100% Онлайн-оплата банківською карткою (WayForPay) | **Так** |
+| 11 | `wayforpay_invois` | WayForPay (інвойс) | Так |
+| 13 | `nakladenii_platiz_z_peredplatoyu_300grn` | Накладений платіж (з передплатою 300грн) | Так |
+| 14 | `wayforpay` | WayForPay | Так |
+| 15 | `card` | Card | Так |
+| 16 | `cash_on_delivery` | Cash_on_delivery | Так |
+
+**Для 100% онлайн-оплати WayForPay сайт використовує ID 8.**
+
+### Правильний формат payment payload
+
+**КРИТИЧНО:** передавати **ТІЛЬКИ** `payment_method_id` (число). Якщо передати `payment_method` (string) разом з `payment_method_id` — KeyCRM **ігнорує** `payment_method_id` і ставить `payment_method_id: 5` ("Other" / "Інше").
+
+**Правильно:**
+```json
+{ "payment_method_id": 8, "amount": 280, "status": "paid", "description": "..." }
+```
+
+**НЕПРАВИЛЬНО (показує "Інше"):**
+```json
+{ "payment_method_id": 8, "payment_method": "WayForPay", "amount": 280, "status": "paid" }
+```
+
+### Payment object fields (з GET /order/{id}?include=payments)
+
+`id`, `destination_id`, `destination_type`, `amount`, `source_currency`, `actual_amount`, `actual_currency`, `is_expense`, `payment_method_id`, `expense_type_id`, `transaction_uuid`, `invoice_url`, `description`, `status`, `payment_date`, `created_at`, `updated_at`
+
+### Приклади payload
+
+**A. Unpaid WayForPay invoice (при створенні замовлення до оплати):**
+```json
+{ "payment_method_id": 8, "amount": 280, "status": "not_paid", "description": "WayForPay інвойс. Замовлення сайту: K-5017" }
+```
+
+**B. Оновлення not_paid → paid (після успішної оплати):**
+```json
+{ "payment_method_id": 8, "status": "paid", "description": "WayForPay: txId123. Замовлення сайту: K-5017" }
+```
+
+**C. Нова paid оплата (fallback):**
+```json
+{ "payment_method_id": 8, "amount": 280, "status": "paid", "description": "WayForPay: txId123. Замовлення сайту: K-5017" }
+```
+
+### Discovery endpoint
+`GET /api/admin/keycrm-payment-methods?orderId=3926` — показує список методів оплати + payment objects конкретного замовлення.
+
+---
+
 ## 13. Order Lifecycle
 
 ### Card Payment Flow (card_wayforpay)

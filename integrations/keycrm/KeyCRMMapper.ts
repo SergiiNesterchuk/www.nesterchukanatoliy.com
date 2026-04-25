@@ -167,11 +167,13 @@ export class KeyCRMMapper {
     const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
     const orderNum = order.orderNumber;
 
-    // Для WayForPay передаємо і payment_method_id, і payment_method як string
-    // щоб KeyCRM прийняв хоча б один формат для правильного відображення
+    // KeyCRM API: передавати ТІЛЬКИ payment_method_id (число).
+    // Якщо передати і payment_method (string) — KeyCRM ігнорує payment_method_id
+    // і призначає ID 5 ("Other" / "Інше").
+    // Endpoint: GET /order/payment-method → ID 8 = WayForPay
     const wpPaymentFields = paymentMethodId
-      ? { payment_method_id: paymentMethodId, payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)" }
-      : { payment_method: this.mapPaymentMethod(order.paymentMethod) };
+      ? { payment_method_id: paymentMethodId }
+      : {};
 
     if (order.paymentStatus === "paid") {
       // Повна оплата отримана

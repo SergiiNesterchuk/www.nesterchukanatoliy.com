@@ -120,9 +120,9 @@ export class KeyCRMService {
           const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
           const amountUAH = Number(order.total) / 100;
           const isPaid = order.paymentStatus === "paid";
+          // ТІЛЬКИ payment_method_id, без payment_method string
           const attachPayload = {
             ...(paymentMethodId ? { payment_method_id: paymentMethodId } : {}),
-            payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)",
             amount: amountUAH,
             status: isPaid ? "paid" : "not_paid",
             description: isPaid && order.externalPaymentId
@@ -233,10 +233,11 @@ export class KeyCRMService {
     const txDescription = order.externalPaymentId
       ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
       : `Оплата карткою. Замовлення сайту: ${orderNum}`;
-    // Передаємо і payment_method_id, і payment_method string
+    // KeyCRM: ТІЛЬКИ payment_method_id (число). Якщо передати payment_method
+    // string — KeyCRM ігнорує ID і ставить "Other" (ID 5).
     const wpMethodFields = paymentMethodId
-      ? { payment_method_id: paymentMethodId, payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)" }
-      : { payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod) };
+      ? { payment_method_id: paymentMethodId }
+      : {};
 
     try {
       const keycrmOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; amount: number }> }>(
