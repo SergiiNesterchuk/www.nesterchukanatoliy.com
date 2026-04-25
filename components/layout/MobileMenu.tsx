@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, X, Phone } from "lucide-react";
 import type { CategoryListItem } from "@/entities/category";
+import { buildPhoneUrl, formatPhoneDisplay } from "@/shared/viber";
 
 interface MobileMenuProps {
   categories: CategoryListItem[];
@@ -15,15 +16,12 @@ interface MobileMenuProps {
   phoneLinkType?: string;
 }
 
-export function MobileMenu({ categories, pages, siteName, phoneEnabled = true, phoneText, phoneNumber, phoneLinkType = "tel" }: MobileMenuProps) {
+export function MobileMenu({ categories, pages, siteName, phoneEnabled = true, phoneText, phoneNumber, phoneLinkType = "viber" }: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const close = () => setIsOpen(false);
 
-  const phoneHref = phoneNumber
-    ? phoneLinkType === "viber"
-      ? `viber://chat?number=${phoneNumber.replace(/[\s\-\(\)]/g, "").replace("+", "%2B")}`
-      : `tel:${phoneNumber.replace(/[\s\-\(\)]/g, "")}`
-    : "";
+  const phoneHref = phoneNumber ? buildPhoneUrl(phoneNumber, phoneLinkType || "viber") : "";
+  const phoneDisplay = phoneNumber ? formatPhoneDisplay(phoneNumber) : "";
 
   return (
     <div className="md:hidden">
@@ -74,7 +72,7 @@ export function MobileMenu({ categories, pages, siteName, phoneEnabled = true, p
                   ) : (
                     <Phone className="h-5 w-5" />
                   )}
-                  {phoneText ? `${phoneText} ${phoneNumber}` : phoneNumber}
+                  {phoneText ? `${phoneText} ${phoneDisplay}` : phoneDisplay}
                 </a>
               )}
             </div>
