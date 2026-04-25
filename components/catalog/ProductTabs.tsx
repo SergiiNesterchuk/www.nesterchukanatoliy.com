@@ -11,26 +11,22 @@ interface Tab {
 
 interface ProductTabsProps {
   description: string | null;
+  deliveryText?: string;
+  paymentText?: string;
 }
 
-export function ProductTabs({ description }: ProductTabsProps) {
-  const tabs: Tab[] = [
-    ...(description
-      ? [{ id: "description", label: "Опис", content: description }]
-      : []),
-    {
-      id: "delivery",
-      label: "Доставка",
-      content:
-        "<p>Доставка здійснюється <strong>Новою Поштою</strong> по всій Україні. Термін: 1-3 робочих дні. Вартість доставки — за тарифами Нової Пошти.</p>",
-    },
-    {
-      id: "payment",
-      label: "Оплата",
-      content:
-        "<p>Оплата карткою онлайн (Visa / Mastercard) через захищений платіжний сервіс.</p>",
-    },
-  ];
+export function ProductTabs({ description, deliveryText, paymentText }: ProductTabsProps) {
+  const tabs: Tab[] = [];
+
+  if (description) {
+    tabs.push({ id: "description", label: "Опис", content: description });
+  }
+  if (deliveryText) {
+    tabs.push({ id: "delivery", label: "Доставка", content: deliveryText });
+  }
+  if (paymentText) {
+    tabs.push({ id: "payment", label: "Оплата", content: paymentText });
+  }
 
   const [activeTab, setActiveTab] = useState(tabs[0]?.id ?? "description");
 

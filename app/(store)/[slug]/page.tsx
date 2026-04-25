@@ -215,15 +215,28 @@ async function CategoryView({
 async function ProductView({ slug }: { slug: string }) {
   const product = await ProductService.getBySlug(slug);
 
-  // Get layout setting
-  let layout = "layout_2"; // default: sticky gallery
+  // Get layout + delivery/payment text from settings
+  let layout = "layout_2";
+  let deliveryText = "";
+  let paymentText = "";
   try {
     const { prisma } = await import("@/shared/db");
-    const setting = await prisma.settings.findUnique({ where: { key: "product_page_layout" } });
-    if (setting?.value) layout = setting.value;
+    const settings = await prisma.settings.findMany({
+      where: { key: { in: ["product_page_layout", "product_delivery_text", "product_payment_text"] } },
+    });
+    for (const s of settings) {
+      if (s.key === "product_page_layout" && s.value) layout = s.value;
+      if (s.key === "product_delivery_text") deliveryText = s.value || "";
+      if (s.key === "product_payment_text") paymentText = s.value || "";
+    }
   } catch { /* fallback */ }
 
-  const layouts: Record<string, React.FC<{ product: typeof product }>> = {
+  // Fallback defaults if settings not configured yet
+  if (!deliveryText) deliveryText = "<p>Доставка <strong>Новою Поштою</strong> по всій Україні. Термін: 1-3 робочих дні.</p>";
+  if (!paymentText) paymentText = "<p>Оплата карткою онлайн або накладений платіж з передплатою.</p>";
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const layouts: Record<string, React.FC<any>> = {
     layout_1: Layout1Classic,
     layout_2: Layout2Sticky,
     layout_3: Layout3Editorial,
@@ -252,7 +265,7 @@ async function ProductView({ slug }: { slug: string }) {
       />
 
       <div className="mt-6">
-        <LayoutComponent product={product} />
+        <LayoutComponent product={product} deliveryText={deliveryText} paymentText={paymentText} />
       </div>
     </div>
   );

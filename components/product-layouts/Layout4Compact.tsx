@@ -4,13 +4,13 @@ import { ProductGallery } from "@/components/catalog/ProductGallery";
 import { ProductTabs } from "@/components/catalog/ProductTabs";
 import { ProductReviews } from "@/components/catalog/ProductReviews";
 import { ProductPurchaseBox } from "./ProductPurchaseBox";
-import { ProductDeliveryInfo } from "./ProductDeliveryInfo";
 import type { ProductDetail } from "@/entities/product";
 
-export function Layout4Compact({ product }: { product: ProductDetail }) {
+interface Props { product: ProductDetail; deliveryText?: string; paymentText?: string; }
+
+export function Layout4Compact({ product, deliveryText, paymentText }: Props) {
   return (
     <div>
-      {/* Compact purchase block */}
       <div className="bg-white rounded-xl border p-4 md:p-6 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-4">
           <div className="aspect-square rounded-lg overflow-hidden bg-gray-50">
@@ -23,14 +23,8 @@ export function Layout4Compact({ product }: { product: ProductDetail }) {
           <ProductPurchaseBox product={product} />
         </div>
       </div>
-      {/* Gallery */}
-      {product.images.length > 1 && (
-        <div className="mb-6">
-          <ProductGallery images={product.images} productName={product.name} />
-        </div>
-      )}
-      <ProductDeliveryInfo />
-      <div className="mt-6"><ProductTabs description={product.description} /></div>
+      {product.images.length > 1 && <div className="mb-6"><ProductGallery images={product.images} productName={product.name} /></div>}
+      <div className="mt-6"><ProductTabs description={product.description} deliveryText={deliveryText} paymentText={paymentText} /></div>
       <ProductReviews productId={product.id} />
     </div>
   );
