@@ -35,7 +35,8 @@ export interface KeyCRMOrderCreate {
   products: KeyCRMOrderProduct[];
   shipping: KeyCRMShipping;
   payments?: Array<{
-    payment_method: string;
+    payment_method?: string;
+    payment_method_id?: number;
     amount: number;
     status: string;
     description?: string;

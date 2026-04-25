@@ -165,10 +165,11 @@ export class KeyCRMMapper {
 
     // Payment records for KeyCRM
     if (order.paymentStatus === "paid") {
-      // Full card payment
+      // Full card payment — use payment_method_id for precise KeyCRM mapping
+      const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
       keycrmOrder.payments = [
         {
-          payment_method: this.mapPaymentMethod(order.paymentMethod),
+          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: this.mapPaymentMethod(order.paymentMethod) }),
           amount: Number(toHryvni(order.total)) || 0,
           status: "paid",
           description: order.externalPaymentId
@@ -226,5 +227,13 @@ export class KeyCRMMapper {
       card_online: "card",
     };
     return mapping[method] || "other";
+  }
+
+  // KeyCRM payment method ID 8 = 100% online card payment via WayForPay
+  static getPaymentMethodId(method: string): number | undefined {
+    if (method === "card_online") {
+      return parseInt(process.env.KEYCRM_PAYMENT_METHOD_CARD_ID || "8", 10);
+    }
+    return undefined;
   }
 }

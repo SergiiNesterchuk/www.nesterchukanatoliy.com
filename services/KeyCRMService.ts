@@ -138,11 +138,13 @@ export class KeyCRMService {
     if (!order || !order.keycrmOrderId) return;
 
     try {
+      // Use payment_method_id for precise KeyCRM mapping when available
+      const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
       const result = await this.client.request<{ id?: number }>(
         "POST",
         `/order/${order.keycrmOrderId}/payment`,
         {
-          payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod),
+          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod) }),
           amount: order.total / 100,
           status: "paid",
           description: order.externalPaymentId
