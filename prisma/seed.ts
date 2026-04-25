@@ -344,14 +344,15 @@ async function main() {
     });
   }
 
-  // Admin user — пароль з env variable ADMIN_DEFAULT_PASSWORD
-  const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || "changeme";
+  // Admin user — логін/пароль з Railway env: ADMIN_LOGIN, ADMIN_PASSWORD
+  const adminEmail = process.env.ADMIN_LOGIN || "admin@nesterchukanatoliy.com";
+  const adminPassword = process.env.ADMIN_PASSWORD || "changeme";
   const passwordHash = createHash("sha256").update(adminPassword).digest("hex");
   await prisma.adminUser.upsert({
-    where: { email: "admin@nesterchukanatoliy.com" },
+    where: { email: adminEmail },
     update: { passwordHash },
     create: {
-      email: "admin@nesterchukanatoliy.com",
+      email: adminEmail,
       passwordHash,
       name: "Адміністратор",
       role: "admin",
