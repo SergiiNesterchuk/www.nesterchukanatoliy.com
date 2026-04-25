@@ -317,11 +317,12 @@ function syncOrderStatus(
 
   // If mapping returned undefined — unknown status_id, don't change order.status
   if (newPublicStatus === undefined) {
-    logger.warn("syncOrderStatus: unknown status_id, skipping status update", {
+    logger.warn("syncOrderStatus: UNMAPPED status_id — add to KEYCRM_STATUS_ID_MAP in shared/keycrm-status-map.ts", {
       orderId: order.id,
       statusId,
       statusGroupId,
       statusName,
+      action: "Status not changed. Add this status_id to the map.",
     });
     // Still save keycrmStatusId for diagnostics
     if (statusId) updateData.keycrmStatusId = statusId;

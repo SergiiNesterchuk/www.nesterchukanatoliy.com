@@ -26,8 +26,8 @@ export type PublicOrderStatus = "new" | "approval" | "production" | "delivery" |
  * When a real cancellation is tested, add the correct ID here.
  * Until then, cancelled is matched only by status name keywords or group 6.
  *
- * SAFETY: status_group_id=4 can NEVER produce "cancelled" — enforced in
- * mapKeycrmToPublicStatus() as a hard override.
+ * NOTE: status_group_id is UNRELIABLE — one group can contain both
+ * delivery AND cancellation sub-statuses. Use exact status_id mapping.
  *
  * To discover all IDs: GET /api/admin/keycrm-statuses
  */
@@ -122,38 +122,27 @@ const KEYCRM_STATUS_NAME_RULES: Array<{ keywords: string[]; status: PublicOrderS
 export function mapKeycrmToPublicStatus(
   statusId?: number,
   statusName?: string,
-  statusGroupId?: number,
+  _statusGroupId?: number,
 ): PublicOrderStatus | undefined {
-  let result: PublicOrderStatus | undefined;
-
-  // 1. Exact status_id match
+  // 1. Exact status_id match — PRIMARY and most reliable source
   if (statusId && KEYCRM_STATUS_ID_MAP[statusId]) {
-    result = KEYCRM_STATUS_ID_MAP[statusId];
+    return KEYCRM_STATUS_ID_MAP[statusId];
   }
 
   // 2. Status name keyword match
-  if (!result && statusName) {
+  if (statusName) {
     const lower = statusName.toLowerCase();
     for (const rule of KEYCRM_STATUS_NAME_RULES) {
       if (rule.keywords.some((kw) => lower.includes(kw))) {
-        result = rule.status;
-        break;
+        return rule.status;
       }
     }
   }
 
-  // 3. Status group_id fallback
-  if (!result && statusGroupId && KEYCRM_STATUS_GROUP_MAP[statusGroupId]) {
-    result = KEYCRM_STATUS_GROUP_MAP[statusGroupId];
-  }
-
-  // Safety: status_group_id=4 (delivery group) can NEVER be "cancelled".
-  // If any mapping step returned "cancelled" but group is delivery, override.
-  if (result === "cancelled" && statusGroupId === 4) {
-    result = "delivery";
-  }
-
-  return result;
+  // 3. status_group_id is NOT used as fallback — it's unreliable because
+  // one group can contain both delivery AND cancellation sub-statuses.
+  // Unknown status_id → return undefined → caller preserves current status.
+  return undefined;
 }
 
 /** Human-readable labels for public statuses (Ukrainian) */
