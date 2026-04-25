@@ -223,6 +223,23 @@ KeyCRM may have dozens of internal sub-statuses. The site maps ALL of them to ex
 
 **Matching order matters:** cancelled is checked first (contains phrases like "не оплачено" that could partially match other rules). Most specific → least specific.
 
+**Mapping by status_id (primary, from production logs):**
+
+| KeyCRM status_id | Probable name | Site status |
+|-----------------|---------------|-------------|
+| 1 | Новий | `new` |
+| 20 | Прийнято | `approval` |
+| 5 | Виробництво | `production` |
+| 19 | Доставка | `delivery` |
+| 12 | Виконано | `completed` |
+| 8 | Скасовано | `cancelled` |
+
+**Mapping priority:** status_id (exact) → status name (keywords) → status_group_id (group fallback) → undefined (no change).
+
+**Important:** if status_id is unknown, the site does NOT reset to "new" — it preserves the current status and logs a warning. To add new status IDs, update `KEYCRM_STATUS_ID_MAP` in `shared/keycrm-status-map.ts`.
+
+**Admin endpoint:** `GET /api/admin/keycrm-statuses` — fetches status list from KeyCRM API and shows current mapping config.
+
 KeyCRM sub-status name is saved in `keycrmStatusName` for diagnostics but is **never shown** to the customer. Customer sees only the global status label.
 
 ### Webhook Endpoint (production)

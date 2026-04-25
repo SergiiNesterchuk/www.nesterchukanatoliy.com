@@ -58,10 +58,11 @@ export async function POST(request: NextRequest) {
         const keycrmStatusName = keycrmOrder.status?.name || keycrmOrder.status_name || "";
         const keycrmStatusId = keycrmOrder.status_id || keycrmOrder.status?.id;
         const trackingNumber = keycrmOrder.tracking_code || keycrmOrder.ttn || null;
-        const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName);
+        const keycrmStatusGroupId = keycrmOrder.status_group_id;
+        const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName, keycrmStatusGroupId);
 
         // Only update if status changed or tracking number arrived
-        if (newPublicStatus !== order.status || trackingNumber) {
+        if (newPublicStatus && (newPublicStatus !== order.status || trackingNumber)) {
           const updateData: Record<string, unknown> = {};
 
           if (newPublicStatus !== order.status) {

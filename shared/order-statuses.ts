@@ -113,7 +113,7 @@ const DELIVERY_HISTORY_LABELS: Record<string, string> = {
 
 /** @deprecated Use mapKeycrmToPublicStatus from keycrm-status-map instead */
 export const mapKeycrmStatus = (keycrmStatusName: string): string => {
-  return mapKeycrmToPublicStatus(undefined, keycrmStatusName);
+  return mapKeycrmToPublicStatus(undefined, keycrmStatusName) || "new";
 };
 
 export function getStatusLabel(status: string): string {

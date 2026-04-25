@@ -112,6 +112,7 @@ async function syncOrderSnapshot(keycrmOrderId: string, eventName: string, conte
     event: eventName,
     source: sourceType,
     keycrmStatusId: extracted.statusId,
+    keycrmStatusGroupId: extracted.statusGroupId,
     keycrmStatusName: extracted.statusName,
     trackingCode: extracted.trackingCode,
     deliveryStatusRaw: extracted.deliveryStatusRaw,
@@ -167,6 +168,7 @@ async function syncOrderSnapshot(keycrmOrderId: string, eventName: string, conte
 
 interface ExtractedFields {
   statusId: number | undefined;
+  statusGroupId: number | undefined;
   statusName: string;
   trackingCode: string | null;
   deliveryStatusRaw: string;
@@ -204,10 +206,11 @@ function extractOrderFields(data: Record<string, unknown>): ExtractedFields {
     const sid = data.status_id;
     statusId = typeof sid === "number" ? sid : parseInt(String(sid), 10) || undefined;
   }
-  // status_group_id as last resort for ID-based mapping
-  if (!statusId && data.status_group_id) {
+  // status_group_id — separate from status_id, used as fallback mapping
+  let statusGroupId: number | undefined;
+  if (data.status_group_id) {
     const gid = data.status_group_id;
-    statusId = typeof gid === "number" ? gid : parseInt(String(gid), 10) || undefined;
+    statusGroupId = typeof gid === "number" ? gid : parseInt(String(gid), 10) || undefined;
   }
   if (!statusName && data.current_status) {
     const cs = data.current_status;
@@ -278,7 +281,7 @@ function extractOrderFields(data: Record<string, unknown>): ExtractedFields {
   const paymentsCount = Array.isArray(payments) ? payments.length : 0;
 
   return {
-    statusId, statusName, trackingCode, deliveryStatusRaw, paymentStatus, paymentsCount,
+    statusId, statusGroupId, statusName, trackingCode, deliveryStatusRaw, paymentStatus, paymentsCount,
     debug: { statusType, statusKeys, trackingFields },
   };
 }
@@ -293,23 +296,37 @@ function syncOrderStatus(
   updateData: Record<string, unknown>,
   historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
 ) {
-  const { statusId, statusName } = extracted;
-  if (!statusName && !statusId) {
-    logger.warn("syncOrderStatus: no status data", { orderId: order.id });
+  const { statusId, statusGroupId, statusName } = extracted;
+  if (!statusName && !statusId && !statusGroupId) {
+    logger.warn("syncOrderStatus: no status data at all", { orderId: order.id });
     return;
   }
 
-  const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName);
+  const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName, statusGroupId);
   const oldPublicStatus = order.status;
 
   logger.info("syncOrderStatus: mapping", {
     orderId: order.id,
     keycrmStatusId: statusId,
+    keycrmStatusGroupId: statusGroupId,
     keycrmStatusName: statusName,
-    mapped: newPublicStatus,
+    mapped: newPublicStatus ?? "UNKNOWN",
     oldLocal: oldPublicStatus,
-    willUpdate: oldPublicStatus !== newPublicStatus || order.keycrmStatusName !== statusName,
+    willUpdate: newPublicStatus !== undefined && (oldPublicStatus !== newPublicStatus || order.keycrmStatusName !== statusName),
   });
+
+  // If mapping returned undefined — unknown status_id, don't change order.status
+  if (newPublicStatus === undefined) {
+    logger.warn("syncOrderStatus: unknown status_id, skipping status update", {
+      orderId: order.id,
+      statusId,
+      statusGroupId,
+      statusName,
+    });
+    // Still save keycrmStatusId for diagnostics
+    if (statusId) updateData.keycrmStatusId = statusId;
+    return;
+  }
 
   if (oldPublicStatus === newPublicStatus && order.keycrmStatusName === statusName) return;
 
