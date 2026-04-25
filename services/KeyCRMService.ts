@@ -137,25 +137,36 @@ export class KeyCRMService {
     const order = await OrderRepository.findById(orderId);
     if (!order || !order.keycrmOrderId) return;
 
+    // Idempotency: if payment already attached, skip
+    if (order.keycrmPaymentId) {
+      logger.info("Payment already attached to KeyCRM, skipping", {
+        orderId,
+        keycrmPaymentId: order.keycrmPaymentId,
+      });
+      return;
+    }
+
+    const orderNum = order.publicOrderNumber || order.orderNumber;
+    const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
+    const amountUAH = order.total / 100;
+
     try {
-      // Use payment_method_id for precise KeyCRM mapping when available
-      const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
       const result = await this.client.request<{ id?: number }>(
         "POST",
         `/order/${order.keycrmOrderId}/payment`,
         {
           ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod) }),
-          amount: order.total / 100,
+          amount: amountUAH,
           status: "paid",
           description: order.externalPaymentId
-            ? `WayForPay: ${order.externalPaymentId}`
-            : "Оплата карткою",
+            ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+            : `Оплата карткою. Замовлення сайту: ${orderNum}`,
         },
         "order",
         orderId
       );
 
-      // Save KeyCRM payment ID for future refund sync
+      // Зберегти KeyCRM payment ID для майбутнього refund sync
       if (result?.id) {
         const { prisma } = await import("@/shared/db");
         await prisma.order.update({
@@ -164,14 +175,18 @@ export class KeyCRMService {
         });
       }
 
-      logger.info("Payment attached in KeyCRM", {
+      logger.info("Оплату прикріплено до замовлення в KeyCRM", {
         orderId,
+        orderNumber: orderNum,
         keycrmOrderId: order.keycrmOrderId,
         keycrmPaymentId: result?.id,
+        paymentMethodId,
+        amountUAH,
       });
     } catch (error) {
-      logger.warn("Failed to attach payment in KeyCRM", {
+      logger.error("Не вдалося прикріпити оплату в KeyCRM", {
         orderId,
+        keycrmOrderId: order.keycrmOrderId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
