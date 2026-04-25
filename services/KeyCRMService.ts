@@ -67,6 +67,21 @@ export class KeyCRMService {
     try {
       const keycrmPayload = KeyCRMMapper.mapOrderToKeycrm(order, this.sourceId);
 
+      // Debug: логувати payment payload що відправляється
+      const orderNum = order.publicOrderNumber || order.orderNumber;
+      logger.info("createOrder: payload payments", {
+        orderId, orderNumber: orderNum,
+        localPaymentStatus: order.paymentStatus,
+        localPaymentMethod: order.paymentMethod,
+        paymentsInPayload: keycrmPayload.payments?.length || 0,
+        paymentDetails: keycrmPayload.payments?.map((p) => ({
+          payment_method_id: p.payment_method_id,
+          payment_method: p.payment_method,
+          amount: p.amount,
+          status: p.status,
+        })),
+      });
+
       const keycrmOrder = await this.client.request<KeyCRMOrderResponse>(
         "POST",
         "/order",
@@ -75,24 +90,79 @@ export class KeyCRMService {
         orderId
       );
 
-      // Try to get payment ID from KeyCRM order (for future refund sync)
-      // Works for both full_payment (paid) and cod_prepayment (partial_paid)
+      // Перевірити чи payments створились і отримати keycrmPaymentId
       let keycrmPaymentId: string | undefined;
-      if (order.paymentStatus === "paid" || order.paymentStatus === "partial_paid") {
-        try {
-          const fullOrder = await this.client.request<{ payments?: Array<{ id: number }> }>(
+      try {
+        const fullOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; payment_method_id?: number; payment_method?: string }> }>(
+          "GET",
+          `/order/${keycrmOrder.id}?include=payments`,
+          undefined, "order", orderId
+        );
+        const payments = fullOrder.payments || [];
+
+        logger.info("createOrder: KeyCRM payments after create", {
+          orderId, orderNumber: orderNum,
+          keycrmOrderId: keycrmOrder.id,
+          paymentsCount: payments.length,
+          payments: payments.map((p) => ({
+            id: p.id, status: p.status,
+            payment_method_id: p.payment_method_id,
+            payment_method: p.payment_method,
+          })),
+        });
+
+        if (payments.length > 0) {
+          keycrmPaymentId = String(payments[0].id);
+        }
+
+        // Якщо card_online і payments не створились — прикріпити вручну
+        if (payments.length === 0 && order.paymentMethod === "card_online") {
+          const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
+          const amountUAH = Number(order.total) / 100;
+          const isPaid = order.paymentStatus === "paid";
+          const attachPayload = {
+            ...(paymentMethodId ? { payment_method_id: paymentMethodId } : {}),
+            payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)",
+            amount: amountUAH,
+            status: isPaid ? "paid" : "not_paid",
+            description: isPaid && order.externalPaymentId
+              ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+              : `WayForPay інвойс. Замовлення сайту: ${orderNum}`,
+          };
+
+          logger.info("createOrder: attaching payment manually (POST /order ignored payments)", {
+            orderId, orderNumber: orderNum, payload: attachPayload,
+          });
+
+          const attachResult = await this.client.request<{ id?: number }>(
+            "POST",
+            `/order/${keycrmOrder.id}/payment`,
+            attachPayload, "order", orderId
+          );
+          if (attachResult?.id) {
+            keycrmPaymentId = String(attachResult.id);
+          }
+
+          // Верифікація
+          const verify = await this.client.request<{ payments?: Array<{ id: number; payment_method_id?: number; payment_method?: string }> }>(
             "GET",
             `/order/${keycrmOrder.id}?include=payments`,
-            undefined,
-            "order",
-            orderId
-          );
-          if (fullOrder.payments && fullOrder.payments.length > 0) {
-            keycrmPaymentId = String(fullOrder.payments[0].id);
+            undefined, "order", orderId
+          ).catch(() => null);
+
+          if (verify?.payments) {
+            logger.info("createOrder: verification after manual attach", {
+              orderId, paymentsCount: verify.payments.length,
+              payments: verify.payments.map((p) => ({
+                id: p.id, payment_method_id: p.payment_method_id, payment_method: p.payment_method,
+              })),
+            });
           }
-        } catch {
-          logger.warn("Could not fetch keycrmPaymentId", { orderId });
         }
+      } catch (e) {
+        logger.warn("createOrder: could not fetch/attach payments", {
+          orderId, error: e instanceof Error ? e.message : String(e),
+        });
       }
 
       await OrderRepository.updateKeycrmSync(orderId, {
@@ -104,7 +174,7 @@ export class KeyCRMService {
       });
 
       logger.info("Order synced to KeyCRM", {
-        orderId,
+        orderId, orderNumber: orderNum,
         keycrmOrderId: keycrmOrder.id,
         keycrmPaymentId,
       });
@@ -163,6 +233,10 @@ export class KeyCRMService {
     const txDescription = order.externalPaymentId
       ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
       : `Оплата карткою. Замовлення сайту: ${orderNum}`;
+    // Передаємо і payment_method_id, і payment_method string
+    const wpMethodFields = paymentMethodId
+      ? { payment_method_id: paymentMethodId, payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)" }
+      : { payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod) };
 
     try {
       const keycrmOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; amount: number }> }>(
@@ -204,7 +278,7 @@ export class KeyCRMService {
       if (targetPayment) {
         const updatePayload = {
           status: "paid",
-          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : {}),
+          ...wpMethodFields,
           description: txDescription,
         };
 
@@ -242,7 +316,7 @@ export class KeyCRMService {
 
     // Case B: замовлення в KeyCRM, оплати не знайдено → прикріпити нову
     const attachPayload = {
-      ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: KeyCRMMapper.mapPaymentMethod(order.paymentMethod) }),
+      ...wpMethodFields,
       amount: amountUAH,
       status: "paid",
       description: txDescription,

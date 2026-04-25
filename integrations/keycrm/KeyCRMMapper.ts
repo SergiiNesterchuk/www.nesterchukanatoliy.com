@@ -167,11 +167,17 @@ export class KeyCRMMapper {
     const paymentMethodId = this.getPaymentMethodId(order.paymentMethod);
     const orderNum = order.orderNumber;
 
+    // Для WayForPay передаємо і payment_method_id, і payment_method як string
+    // щоб KeyCRM прийняв хоча б один формат для правильного відображення
+    const wpPaymentFields = paymentMethodId
+      ? { payment_method_id: paymentMethodId, payment_method: "100% Онлайн-оплата банківською карткою (WayForPay)" }
+      : { payment_method: this.mapPaymentMethod(order.paymentMethod) };
+
     if (order.paymentStatus === "paid") {
       // Повна оплата отримана
       keycrmOrder.payments = [
         {
-          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: this.mapPaymentMethod(order.paymentMethod) }),
+          ...wpPaymentFields,
           amount: Number(toHryvni(order.total)) || 0,
           status: "paid",
           description: order.externalPaymentId
@@ -179,11 +185,11 @@ export class KeyCRMMapper {
             : `Оплата карткою. Замовлення сайту: ${orderNum}`,
         },
       ];
-    } else if (order.paymentMethod === "card_online" && ["pending", "awaiting_prepayment"].includes(order.paymentStatus)) {
-      // Інвойс створено, але ще не оплачено — зберігаємо в KeyCRM як not_paid
+    } else if (order.paymentMethod === "card_online") {
+      // Інвойс WayForPay створено, ще не оплачено — зберігаємо як not_paid
       keycrmOrder.payments = [
         {
-          ...(paymentMethodId ? { payment_method_id: paymentMethodId } : { payment_method: this.mapPaymentMethod(order.paymentMethod) }),
+          ...wpPaymentFields,
           amount: Number(toHryvni(order.total)) || 0,
           status: "not_paid",
           description: `WayForPay інвойс створено. Замовлення сайту: ${orderNum}. Очікує оплати.`,

@@ -78,6 +78,15 @@ export async function POST(request: NextRequest) {
 
       const payment = await OrderService.createPaymentForOrder(order.id);
 
+      // Синхронізувати замовлення в KeyCRM одразу (з unpaid payment)
+      // щоб менеджер бачив замовлення навіть до оплати
+      if (process.env.CRM_SYNC_ENABLED !== "false") {
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.createOrder(order.id).catch(() => {});
+        });
+      }
+
       return successResponse({
         orderId: order.id,
         orderNumber: order.orderNumber,
