@@ -48,6 +48,13 @@ export default function RootLayout({
         <Script id="clarity-init" strategy="afterInteractive">
           {`window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments)};`}
         </Script>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-SPHFK5YCCF"
+          strategy="afterInteractive"
+        />
+        <Script id="ga-init" strategy="afterInteractive">
+          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-SPHFK5YCCF',{page_path:window.location.pathname});`}
+        </Script>
       </body>
     </html>
   );
