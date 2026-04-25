@@ -402,16 +402,14 @@ function syncDeliveryAndTracking(
     if (effectiveStatus === "completed" && oldDelivery !== "delivered") newDelivery = "delivered";
   }
 
-  // 3. Tracking
+  // 3. Tracking — NEVER null out existing TTN (API may just not include it)
   const { trackingCode } = extracted;
   let trackingChanged = false;
   if (trackingCode && trackingCode !== order.trackingNumber) {
     updateData.trackingNumber = trackingCode;
     trackingChanged = true;
     if (!newDelivery && (oldDelivery === "pending" || !order.deliveryStatus)) newDelivery = "shipped";
-  } else if (!trackingCode && order.trackingNumber) {
-    updateData.trackingNumber = null;
-    trackingChanged = true;
+    logger.info("tracking extracted", { orderId: order.id, trackingCode, old: order.trackingNumber });
   }
 
   // 4. Apply delivery status
@@ -427,14 +425,12 @@ function syncDeliveryAndTracking(
     historyEntries.push({ source: "delivery", oldStatus: oldDelivery, newStatus: newDelivery, message });
   }
 
-  // 5. Tracking-only history
+  // 5. Tracking-only history (no delivery status change)
   if (trackingChanged && !newDelivery) {
-    if (trackingCode && !order.trackingNumber) {
+    if (!order.trackingNumber) {
       historyEntries.push({ source: "delivery", oldStatus: oldDelivery, newStatus: oldDelivery, message: `ТТН додано: ${trackingCode}` });
-    } else if (trackingCode && order.trackingNumber && trackingCode !== order.trackingNumber) {
+    } else {
       historyEntries.push({ source: "delivery", oldStatus: oldDelivery, newStatus: oldDelivery, message: `ТТН оновлено: ${trackingCode}` });
-    } else if (!trackingCode && order.trackingNumber) {
-      historyEntries.push({ source: "delivery", oldStatus: oldDelivery, newStatus: oldDelivery, message: "ТТН видалено" });
     }
   }
 }
