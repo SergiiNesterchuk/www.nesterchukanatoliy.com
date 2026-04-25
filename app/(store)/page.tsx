@@ -18,6 +18,28 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Normalize an internal link from DB settings:
+ * - If it's a relative path (/katalog/) → keep as-is
+ * - If it's an absolute URL to our own domain (old Railway or current) → extract path
+ * - If it's an external URL → keep as-is
+ * This prevents old *.up.railway.app URLs from rendering on the frontend.
+ */
+function normalizeInternalLink(link: string): string {
+  if (!link || link.startsWith("/")) return link || "/katalog/";
+  try {
+    const url = new URL(link);
+    // Strip our own domains (old Railway, current production) → use relative path
+    if (url.hostname.includes("railway.app") || url.hostname.includes("nesterchukanatoliy")) {
+      return url.pathname + url.search + url.hash || "/katalog/";
+    }
+    // External URL — keep absolute
+    return link;
+  } catch {
+    return link; // Not a valid URL — return as-is
+  }
+}
+
 async function getHomeConfig() {
   const defaults: Record<string, string> = {
     homepage_title: "Натуральні продукти",
@@ -63,6 +85,12 @@ export default async function HomePage() {
   }
 
   const hp = await getHomeConfig();
+
+  // Normalize CTA link: strip old Railway domain if admin left an absolute URL
+  // pointing to the old *.up.railway.app. Convert to relative path so it works
+  // on any domain (production, staging, custom).
+  hp.homepage_cta_link = normalizeInternalLink(hp.homepage_cta_link);
+
   const showHero = hp.homepage_show_hero !== "false";
   const showCategories = hp.homepage_show_categories !== "false";
   const showProducts = hp.homepage_show_products !== "false";
