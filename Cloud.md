@@ -223,25 +223,44 @@ KeyCRM may have dozens of internal sub-statuses. The site maps ALL of them to ex
 
 **Matching order matters:** cancelled is checked first (contains phrases like "не оплачено" that could partially match other rules). Most specific → least specific.
 
-**Mapping by status_id (verified empirically from production webhook logs):**
+**Повна таблиця KeyCRM статусів (verified via API `/order/status`, April 2026):**
 
-| KeyCRM status_id | Name | Group | Site status | Notes |
-|-----------------|------|-------|-------------|-------|
-| 1 | Новий | 1 | `new` | |
-| 20 | Прийнято | 2 | `approval` | Customer sees "Готується до відправки" |
-| 5 | Виробництво | 3 | `production` | Needs verification |
-| 8 | Передано в доставку | 4 | `delivery` | Confirmed by TTN creation test. Was incorrectly `cancelled` before fix. |
-| 19 | Доставка | 4 | `delivery` | Needs verification |
-| 12 | Виконано | 5 | `completed` | Needs verification |
-| ? | Скасовано | 6 | `cancelled` | ID not yet known — mapped only by name keywords or group 6 |
+| status_id | Системна назва API | Назва в KeyCRM UI | Site status | Customer label |
+|-----------|-------------------|-------------------|-------------|----------------|
+| 1 | `new` | Новий | `new` | Нове |
+| 2 | `presence_confirmed` | Наявність підтверджена | `approval` | Готується до відправки |
+| 3 | `waiting_for_email_response` | Очікування відповіді | `approval` | Готується до відправки |
+| 4 | `Оплачена попередня партія` | Оплачена попередня партія | `approval` | Готується до відправки |
+| 5 | `transferred_to_production` | Передано у виробництво | `production` | Виробництво |
+| 6 | `manufacturing` | Виготовляється | `production` | Виробництво |
+| 7 | `manufactured` | Виготовлено | `production` | Виробництво |
+| 8 | `delivered_to_delivery` | Передано в доставку | `delivery` | Доставка |
+| 9 | `delivered` | Доставлено | `completed` | Виконано |
+| 10 | `departing` | Відправляється | `delivery` | Доставка |
+| 11 | `in_transit` | В дорозі | `delivery` | Доставка |
+| 12 | `completed` | Виконано | `completed` | Виконано |
+| 13 | `incorrect_data` | Некоректні дані | `cancelled` | Скасовано |
+| 14 | `underbid` | Не влаштувала ціна | `cancelled` | Скасовано |
+| 15 | `not_available` | Немає в наявності | `cancelled` | Скасовано |
+| 19 | (кастомний) | Скасовано | `cancelled` | Скасовано |
+| 20 | (кастомний) | Прийнято | `approval` | Готується до відправки |
 
-**Mapping priority:** status_id (exact) → status name (keywords) → status_group_id (group fallback) → undefined (no change).
+**Як це працює:**
+1. Dynamic cache: при першому webhook код робить `GET /order/status` → отримує список статусів (id + системна назва) → мапить по keywords в назві → кешує на 1 годину.
+2. Manual overrides: `KEYCRM_STATUS_ID_OVERRIDES` в `shared/keycrm-status-map.ts` — для кастомних статусів (19, 20), чиї системні назви не матчаться по keywords.
+3. Якщо статус невідомий → `undefined` → статус на сайті НЕ змінюється, логується warning.
 
-**Important:** if status_id is unknown, the site does NOT reset to "new" — it preserves the current status and logs a warning. To add new status IDs, update `KEYCRM_STATUS_ID_MAP` in `shared/keycrm-status-map.ts`. Any status in delivery group (group_id=4) MUST map to `delivery`, not `cancelled`.
+**Важливо:**
+- Системна назва API ≠ назва в UI KeyCRM (наприклад, `presence_confirmed` ≠ "Наявність підтверджена").
+- Кастомні статуси (19, 20) не повертаються в `/order/status` — потрібні manual overrides.
+- Якщо додати новий статус у KeyCRM з зрозумілою системною назвою — він автоматично замапиться.
+- Якщо назва нестандартна — додати override в `KEYCRM_STATUS_ID_OVERRIDES`.
 
-**Admin endpoint:** `GET /api/admin/keycrm-statuses` — fetches status list from KeyCRM API and shows current mapping config.
+**Перевірка mapping:** `GET /api/admin/keycrm-statuses` — показує всі статуси з API + поточний mapping + "UNMAPPED" якщо є проблема.
 
-KeyCRM sub-status name is saved in `keycrmStatusName` for diagnostics but is **never shown** to the customer. Customer sees only the global status label.
+**Перевірка конкретного замовлення:** `GET /api/admin/keycrm-order-debug?orderId=3912` — показує всі поля замовлення, shipping, TTN.
+
+KeyCRM sub-status name зберігається в `keycrmStatusName` для діагностики, але **ніколи не показується** користувачу.
 
 ### Webhook Endpoint (production)
 
