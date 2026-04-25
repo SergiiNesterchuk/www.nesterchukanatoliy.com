@@ -12,23 +12,28 @@ export type PublicOrderStatus = "new" | "approval" | "production" | "delivery" |
  * To discover new IDs: check Railway logs for "syncOrderStatus: mapping"
  * or use GET /api/admin/keycrm-statuses to fetch the full list.
  *
- * Known IDs (from production logs, May 2026):
- *   1  = Новий (new)
- *   20 = Прийнято (approval)
- *   5  = Виробництво (production) — needs verification
- *   19 = Доставка / Передано в доставку (delivery) — needs verification
- *   12 = Виконано (completed) — needs verification
- *   8  = Скасовано (cancelled) — needs verification
+ * Known IDs (from production webhook logs, verified empirically):
+ *   1  = Новий (new)                        — group 1
+ *   20 = Прийнято (approval)                — group 2
+ *   5  = Виробництво (production)           — group 3 (needs verification)
+ *   8  = Передано в доставку (delivery)     — group 4, confirmed by TTN test
+ *   19 = Доставка (delivery)                — group 4 (needs verification)
+ *   12 = Виконано (completed)               — group 5 (needs verification)
  *
- * TODO: verify exact names via GET /api/admin/keycrm-statuses after deploy
+ * Cancelled: status_id NOT YET KNOWN — do NOT guess.
+ * When a real cancellation is tested, add the correct ID here.
+ * Until then, cancelled is matched only by status name keywords or group 6.
+ *
+ * To discover all IDs: GET /api/admin/keycrm-statuses
  */
 export const KEYCRM_STATUS_ID_MAP: Record<number, PublicOrderStatus> = {
   1: "new",
   20: "approval",
   5: "production",
+  8: "delivery",    // Передано в доставку (was incorrectly "cancelled")
   19: "delivery",
   12: "completed",
-  8: "cancelled",
+  // cancelled: ID unknown — mapped via name keywords or status_group_id=6
 };
 
 /**

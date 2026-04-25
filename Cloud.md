@@ -223,20 +223,21 @@ KeyCRM may have dozens of internal sub-statuses. The site maps ALL of them to ex
 
 **Matching order matters:** cancelled is checked first (contains phrases like "не оплачено" that could partially match other rules). Most specific → least specific.
 
-**Mapping by status_id (primary, from production logs):**
+**Mapping by status_id (verified empirically from production webhook logs):**
 
-| KeyCRM status_id | Probable name | Site status |
-|-----------------|---------------|-------------|
-| 1 | Новий | `new` |
-| 20 | Прийнято | `approval` |
-| 5 | Виробництво | `production` |
-| 19 | Доставка | `delivery` |
-| 12 | Виконано | `completed` |
-| 8 | Скасовано | `cancelled` |
+| KeyCRM status_id | Name | Group | Site status | Notes |
+|-----------------|------|-------|-------------|-------|
+| 1 | Новий | 1 | `new` | |
+| 20 | Прийнято | 2 | `approval` | Customer sees "Готується до відправки" |
+| 5 | Виробництво | 3 | `production` | Needs verification |
+| 8 | Передано в доставку | 4 | `delivery` | Confirmed by TTN creation test. Was incorrectly `cancelled` before fix. |
+| 19 | Доставка | 4 | `delivery` | Needs verification |
+| 12 | Виконано | 5 | `completed` | Needs verification |
+| ? | Скасовано | 6 | `cancelled` | ID not yet known — mapped only by name keywords or group 6 |
 
 **Mapping priority:** status_id (exact) → status name (keywords) → status_group_id (group fallback) → undefined (no change).
 
-**Important:** if status_id is unknown, the site does NOT reset to "new" — it preserves the current status and logs a warning. To add new status IDs, update `KEYCRM_STATUS_ID_MAP` in `shared/keycrm-status-map.ts`.
+**Important:** if status_id is unknown, the site does NOT reset to "new" — it preserves the current status and logs a warning. To add new status IDs, update `KEYCRM_STATUS_ID_MAP` in `shared/keycrm-status-map.ts`. Any status in delivery group (group_id=4) MUST map to `delivery`, not `cancelled`.
 
 **Admin endpoint:** `GET /api/admin/keycrm-statuses` — fetches status list from KeyCRM API and shows current mapping config.
 
