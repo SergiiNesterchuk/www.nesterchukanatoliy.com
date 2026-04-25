@@ -277,6 +277,21 @@ async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
     }
   }
 
+  // --- Sync payment status from KeyCRM (if order has payments data) ---
+  const paymentSync = syncPaymentStatusFromKeycrmOrder(
+    keycrmOrder,
+    { paymentStatus: order.paymentStatus, total: order.total, paymentMethod: order.paymentMethod }
+  );
+  if (paymentSync.newPaymentStatus) {
+    updateData.paymentStatus = paymentSync.newPaymentStatus;
+    historyEntries.push({
+      source: "keycrm_webhook",
+      oldStatus: order.paymentStatus,
+      newStatus: paymentSync.newPaymentStatus,
+      message: paymentSync.message,
+    });
+  }
+
   // --- Apply updates ---
   if (Object.keys(updateData).length > 0) {
     await prisma.order.update({ where: { id: order.id }, data: updateData });
@@ -323,64 +338,84 @@ async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
 async function handlePaymentEvent(keycrmOrderId: string, eventName: string) {
   logger.info("Webhook: payment event received", { keycrmOrderId, event: eventName });
 
+  if (!keycrmOrderId) {
+    await IntegrationLogRepository.create({
+      integration: "keycrm",
+      direction: "inbound",
+      method: "WEBHOOK",
+      endpoint: ENDPOINT,
+      entityType: "payment",
+      responseStatus: 200,
+    });
+    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "no_order_id" });
+  }
+
+  const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
+  if (!order) {
+    await IntegrationLogRepository.create({
+      integration: "keycrm",
+      direction: "inbound",
+      method: "WEBHOOK",
+      endpoint: ENDPOINT,
+      entityType: "payment",
+      entityId: keycrmOrderId,
+      errorMessage: "Order not found locally",
+    });
+    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "order_not_found" });
+  }
+
+  const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
+  if (!keycrmOrder) {
+    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "api_fetch_failed" });
+  }
+
+  const { newPaymentStatus, paidAmount, message } = syncPaymentStatusFromKeycrmOrder(
+    keycrmOrder,
+    { paymentStatus: order.paymentStatus, total: order.total, paymentMethod: order.paymentMethod }
+  );
+
+  if (newPaymentStatus) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { paymentStatus: newPaymentStatus },
+    });
+
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        source: "keycrm_webhook",
+        oldStatus: order.paymentStatus,
+        newStatus: newPaymentStatus,
+        message,
+      },
+    }).catch(() => { /* non-critical */ });
+
+    logger.info("Webhook: payment status synced from KeyCRM", {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      oldPaymentStatus: order.paymentStatus,
+      newPaymentStatus,
+      paidAmount,
+      orderTotal: order.total,
+    });
+  }
+
   await IntegrationLogRepository.create({
     integration: "keycrm",
     direction: "inbound",
     method: "WEBHOOK",
     endpoint: ENDPOINT,
     entityType: "payment",
-    entityId: keycrmOrderId || undefined,
+    entityId: order.id,
     responseStatus: 200,
   });
 
-  // If we have an order ID, fetch from API to get payment info
-  if (keycrmOrderId) {
-    const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
-    if (keycrmOrder) {
-      const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
-      if (order) {
-        const paymentStatus = keycrmOrder.payment_status;
-        const paymentStatusMap: Record<string, string> = {
-          paid: "paid",
-          partially_paid: "partial_paid",
-          not_paid: "pending",
-          refunded: "refunded",
-          cancelled: "cancelled",
-        };
-        const paymentHistoryLabels: Record<string, string> = {
-          paid: "Замовлення оплачено",
-          partial_paid: "Передплату отримано",
-          pending: "Оплата очікується",
-          refunded: "Кошти повернено",
-          cancelled: "Платіж скасовано",
-        };
-        const mappedStatus = paymentStatusMap[String(paymentStatus)];
-        if (mappedStatus && mappedStatus !== order.paymentStatus) {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { paymentStatus: mappedStatus },
-          });
-          await prisma.orderStatusHistory.create({
-            data: {
-              orderId: order.id,
-              source: "payment_callback",
-              oldStatus: order.paymentStatus,
-              newStatus: mappedStatus,
-              message: paymentHistoryLabels[mappedStatus] || `Статус оплати: ${mappedStatus}`,
-            },
-          }).catch(() => { /* non-critical */ });
-
-          logger.info("Webhook: payment status updated via API", {
-            orderId: order.id,
-            oldPaymentStatus: order.paymentStatus,
-            newPaymentStatus: mappedStatus,
-          });
-        }
-      }
-    }
-  }
-
-  return NextResponse.json({ status: "ok", event: "payment", handled: true });
+  return NextResponse.json({
+    status: "ok",
+    event: "payment",
+    updated: !!newPaymentStatus,
+    paymentStatus: newPaymentStatus || order.paymentStatus,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +452,7 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
   }
 
   try {
-    const res = await fetch(`${baseUrl}/order/${keycrmOrderId}`, {
+    const res = await fetch(`${baseUrl}/order/${keycrmOrderId}?include=payments`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
     });
 
@@ -434,4 +469,87 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
     });
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Payment status sync from KeyCRM order data
+// ---------------------------------------------------------------------------
+
+interface PaymentSyncResult {
+  newPaymentStatus: string | null; // null = no change
+  paidAmount: number; // in kopiyky
+  message: string;
+}
+
+/**
+ * Calculate the correct paymentStatus from KeyCRM order payments.
+ * Returns null newPaymentStatus if no change needed.
+ */
+function syncPaymentStatusFromKeycrmOrder(
+  keycrmOrder: Record<string, unknown>,
+  localOrder: { paymentStatus: string; total: number; paymentMethod: string }
+): PaymentSyncResult {
+  const payments = keycrmOrder.payments as Array<Record<string, unknown>> | undefined;
+  const orderTotal = localOrder.total; // in kopiyky
+
+  // Calculate paid/refunded amounts from KeyCRM payments
+  let paidAmount = 0; // kopiyky
+  let refundedAmount = 0;
+  let hasActivePayment = false;
+
+  if (payments && Array.isArray(payments)) {
+    for (const p of payments) {
+      const status = String(p.status || "");
+      const amount = Number(p.amount || 0) * 100; // KeyCRM stores in UAH, we use kopiyky
+
+      if (status === "paid" || status === "approved") {
+        paidAmount += amount;
+        hasActivePayment = true;
+      } else if (status === "canceled" || status === "refunded") {
+        refundedAmount += amount;
+      }
+    }
+  }
+
+  // Also check KeyCRM's own payment_status as fallback
+  const keycrmPaymentStatus = String(keycrmOrder.payment_status || "");
+
+  let newPaymentStatus: string;
+  let message: string;
+
+  if (paidAmount >= orderTotal) {
+    newPaymentStatus = "paid";
+    message = `Оплату отримано повністю: ${(paidAmount / 100).toFixed(0)} грн`;
+  } else if (paidAmount > 0) {
+    newPaymentStatus = "partial_paid";
+    message = `Часткову оплату отримано: ${(paidAmount / 100).toFixed(0)} грн`;
+  } else if (refundedAmount > 0 && !hasActivePayment) {
+    newPaymentStatus = "refunded";
+    message = "Кошти повернено";
+  } else if (keycrmPaymentStatus === "paid") {
+    newPaymentStatus = "paid";
+    message = "Оплату отримано";
+  } else if (keycrmPaymentStatus === "partially_paid") {
+    newPaymentStatus = "partial_paid";
+    message = "Часткову оплату отримано";
+  } else if (keycrmPaymentStatus === "refunded") {
+    newPaymentStatus = "refunded";
+    message = "Кошти повернено";
+  } else {
+    // No active payments — keep current or set to pending
+    // Don't override WayForPay-set statuses (cod_pending, awaiting_prepayment) if KeyCRM says "not_paid"
+    if (keycrmPaymentStatus === "not_paid" && !["pending", "cod_pending", "awaiting_prepayment", "failed", "prepayment_failed"].includes(localOrder.paymentStatus)) {
+      newPaymentStatus = "pending";
+      message = "Оплата очікується";
+    } else {
+      return { newPaymentStatus: null, paidAmount, message: "" };
+    }
+  }
+
+  // Only return change if status actually differs
+  if (newPaymentStatus === localOrder.paymentStatus) {
+    return { newPaymentStatus: null, paidAmount, message: "" };
+  }
+
+  return { newPaymentStatus, paidAmount, message };
 }

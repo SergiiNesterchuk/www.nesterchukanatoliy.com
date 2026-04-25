@@ -224,10 +224,14 @@ export class KeyCRMService {
         }
       }
 
-      // Comment with correct amount (prepayment or full)
+      // Comment with order number, amount, and transaction details
+      const orderNum = order.publicOrderNumber || order.orderNumber;
+      const amountStr = (refundAmount / 100).toFixed(2);
+      const txId = order.externalPaymentId || "N/A";
+
       const commentText = refundSynced
-        ? `${refundLabel} WayForPay скасована/повернена. Статус: ${order.paymentStatus}. Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(refundAmount / 100).toFixed(2)} UAH. Фінансовий запис у KeyCRM синхронізовано.`
-        : `Увага: ${refundLabel.toLowerCase()} WayForPay повернено (${order.paymentStatus}). Transaction ID: ${order.externalPaymentId || "N/A"}. Сума: ${(refundAmount / 100).toFixed(2)} UAH. Потрібна ручна перевірка фінансового запису.`;
+        ? `${refundLabel} WayForPay скасовано / кошти повернено. Замовлення сайту: ${orderNum}. Сума: ${amountStr} грн. Transaction ID: ${txId}. Фінансовий запис у KeyCRM синхронізовано.`
+        : `Увага: ${refundLabel.toLowerCase()} WayForPay повернено. Замовлення сайту: ${orderNum}. Сума: ${amountStr} грн. Transaction ID: ${txId}. Потрібна ручна перевірка фінансового запису.`;
 
       await this.client.request(
         "PUT",
