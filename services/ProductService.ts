@@ -17,8 +17,9 @@ export class ProductService {
     limit?: number;
   }) {
     const result = await ProductRepository.findMany(options);
+    const items = result.items.map(this.toListItem);
     return {
-      items: result.items.map(this.toListItem),
+      items: await this.enrichWithRatings(items),
       total: result.total,
       page: result.page,
       pages: result.pages,
@@ -27,7 +28,29 @@ export class ProductService {
 
   static async getAll() {
     const products = await ProductRepository.findAll();
-    return products.map(this.toListItem);
+    const items = products.map(this.toListItem);
+    return this.enrichWithRatings(items);
+  }
+
+  /** Batch fetch average ratings for product list */
+  private static async enrichWithRatings(items: ProductListItem[]): Promise<ProductListItem[]> {
+    if (items.length === 0) return items;
+    try {
+      const { prisma } = await import("@/shared/db");
+      const ids = items.map((i) => i.id);
+      const ratings = await prisma.productReview.groupBy({
+        by: ["productId"],
+        where: { productId: { in: ids }, status: "approved" },
+        _avg: { rating: true },
+      });
+      const ratingMap = new Map(ratings.map((r) => [r.productId, r._avg.rating || 0]));
+      return items.map((item) => ({
+        ...item,
+        averageRating: Math.round((ratingMap.get(item.id) || 0) * 10) / 10,
+      }));
+    } catch {
+      return items; // fallback: 0 ratings
+    }
   }
 
   static async getAllSlugs() {
@@ -58,6 +81,7 @@ export class ProductService {
       quantity: product.quantity,
       coverImage: product.images[0]?.url ?? null,
       reviewCount: product._count?.reviews ?? 0,
+      averageRating: 0, // enriched later by enrichWithRatings()
       category: product.category,
     };
   }

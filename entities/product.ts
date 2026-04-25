@@ -16,6 +16,7 @@ export interface ProductListItem {
   quantity: number | null;
   coverImage: string | null;
   reviewCount: number;
+  averageRating: number;
   category: {
     name: string;
     slug: string;
