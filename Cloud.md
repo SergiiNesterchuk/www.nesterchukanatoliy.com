@@ -926,7 +926,7 @@ Currently logs "no provider configured" without sending.
 | KeyCRM webhook (legacy alias) | `.../api/keycrm/webhook` (re-export) |
 | Cron status sync | `.../api/cron/keycrm-status-sync?secret=CRON_SECRET` |
 
-**Admin credentials:** `admin@nesterchukanatoliy.com` / `admin123` (change in production!)
+**Admin credentials:** `admin@nesterchukanatoliy.com` (пароль змінено, не зберігається в документації)
 
 ---
 

@@ -344,11 +344,11 @@ async function main() {
     });
   }
 
-  // Admin user (password: admin123 — change in production!)
-  const passwordHash = createHash("sha256").update("admin123").digest("hex");
+  // Admin user
+  const passwordHash = createHash("sha256").update("Flatronw2242t").digest("hex");
   await prisma.adminUser.upsert({
     where: { email: "admin@nesterchukanatoliy.com" },
-    update: {},
+    update: { passwordHash },
     create: {
       email: "admin@nesterchukanatoliy.com",
       passwordHash,
