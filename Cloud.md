@@ -1,5 +1,7 @@
 # Cloud.md — Infrastructure, Integrations & Maintenance Guide
 
+> **Мова відповідей:** всі відповіді, звіти, пояснення та коментарі Cloud Code — **ВИКЛЮЧНО українською мовою**. Технічні терміни (API, callback, payload, webhook) можна залишати англійською, але весь текст має бути українською. Це правило має HIGH пріоритет і діє автоматично для всіх задач.
+
 > Правило: кожна зміна, яка додає нову Railway variable, інтеграцію, endpoint, payment method, cron або змінює production flow, **повинна одночасно оновлювати Cloud.md**. Якщо Cloud.md не оновлено — задача незавершена.
 
 ---

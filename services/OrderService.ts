@@ -249,32 +249,14 @@ export class OrderService {
       } catch { /* non-critical */ }
 
       if (process.env.CRM_SYNC_ENABLED !== "false") {
-        // Refetch order to get latest keycrmOrderId (may have been synced before payment)
-        const freshOrder = await OrderRepository.findById(order.id);
-        const keycrmOrderExists = !!freshOrder?.keycrmOrderId;
-
-        if (keycrmOrderExists) {
-          // Order already in KeyCRM (created before payment) → attach payment to existing order
-          logger.info("Attaching payment to existing KeyCRM order", {
-            orderId: order.id,
-            keycrmOrderId: freshOrder!.keycrmOrderId,
+        // Централізована синхронізація оплати: обробляє всі сценарії
+        // (нове замовлення, існуюче без оплати, оновлення not_paid → paid)
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.syncPaymentToKeyCRM(order.id).catch((e) => {
+            logger.error("KeyCRM payment sync failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
           });
-          import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
-            const service = new KeyCRMService();
-            service.attachPayment(order.id).catch((e) => {
-              logger.error("KeyCRM payment attach failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
-            });
-          });
-        } else {
-          // Order not yet in KeyCRM → create order with payment included
-          await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });
-          import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
-            const service = new KeyCRMService();
-            service.createOrder(order.id).catch((e) => {
-              logger.error("Async CRM sync failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
-            });
-          });
-        }
+        });
       }
 
       logger.info("Payment successful", { orderId: order.id, orderNumber: order.orderNumber });

@@ -133,22 +133,78 @@ export class KeyCRMService {
     }
   }
 
-  async attachPayment(orderId: string): Promise<void> {
+  /**
+   * Централізована функція синхронізації оплати з KeyCRM.
+   * Обробляє всі сценарії: нове замовлення, існуюче без оплати,
+   * існуюче з not_paid оплатою, вже оплачене (idempotency).
+   */
+  async syncPaymentToKeyCRM(orderId: string): Promise<void> {
     const order = await OrderRepository.findById(orderId);
-    if (!order || !order.keycrmOrderId) return;
-
-    // Idempotency: if payment already attached, skip
-    if (order.keycrmPaymentId) {
-      logger.info("Payment already attached to KeyCRM, skipping", {
-        orderId,
-        keycrmPaymentId: order.keycrmPaymentId,
-      });
+    if (!order) {
+      logger.error("syncPaymentToKeyCRM: замовлення не знайдено", { orderId });
       return;
     }
 
     const orderNum = order.publicOrderNumber || order.orderNumber;
+
+    // Case A: замовлення ще не в KeyCRM → створити з оплатою
+    if (!order.keycrmOrderId) {
+      logger.info("syncPaymentToKeyCRM: створюємо замовлення в KeyCRM з оплатою", {
+        orderId, orderNumber: orderNum, action: "createOrder",
+      });
+      await OrderRepository.updateKeycrmSync(orderId, { keycrmSyncStatus: "pending" });
+      await this.createOrder(orderId);
+      return;
+    }
+
+    // Case D: оплата вже прикріплена — перевірити чи статус paid
+    if (order.keycrmPaymentId) {
+      // Перевірити поточний статус оплати в KeyCRM
+      try {
+        const keycrmOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; amount: number }> }>(
+          "GET",
+          `/order/${order.keycrmOrderId}?include=payments`,
+          undefined, "order", orderId
+        );
+        const existingPayment = keycrmOrder.payments?.find((p) => String(p.id) === order.keycrmPaymentId);
+
+        if (existingPayment?.status === "paid") {
+          logger.info("syncPaymentToKeyCRM: оплата вже paid в KeyCRM, пропуск", {
+            orderId, orderNumber: orderNum, keycrmPaymentId: order.keycrmPaymentId, action: "skip",
+          });
+          return;
+        }
+
+        // Case C: оплата є, але статус не paid → оновити на paid
+        if (existingPayment) {
+          logger.info("syncPaymentToKeyCRM: оновлюємо статус оплати на paid", {
+            orderId, orderNumber: orderNum, keycrmPaymentId: order.keycrmPaymentId,
+            oldStatus: existingPayment.status, action: "updatePayment",
+          });
+          await this.client.request(
+            "PUT",
+            `/order/${order.keycrmOrderId}/payment/${order.keycrmPaymentId}`,
+            { status: "paid" },
+            "order", orderId
+          );
+          return;
+        }
+      } catch (e) {
+        logger.warn("syncPaymentToKeyCRM: не вдалося перевірити оплату, спробуємо прикріпити нову", {
+          orderId, error: e instanceof Error ? e.message : String(e),
+        });
+        // Продовжити до створення нової оплати
+      }
+    }
+
+    // Case B: замовлення в KeyCRM, але оплати немає → прикріпити
     const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
     const amountUAH = order.total / 100;
+
+    logger.info("syncPaymentToKeyCRM: прикріплюємо оплату", {
+      orderId, orderNumber: orderNum, keycrmOrderId: order.keycrmOrderId,
+      paymentMethodId, amountUAH, action: "attachPayment",
+    });
 
     try {
       const result = await this.client.request<{ id?: number }>(
@@ -162,11 +218,9 @@ export class KeyCRMService {
             ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
             : `Оплата карткою. Замовлення сайту: ${orderNum}`,
         },
-        "order",
-        orderId
+        "order", orderId
       );
 
-      // Зберегти KeyCRM payment ID для майбутнього refund sync
       if (result?.id) {
         const { prisma } = await import("@/shared/db");
         await prisma.order.update({
@@ -175,21 +229,42 @@ export class KeyCRMService {
         });
       }
 
-      logger.info("Оплату прикріплено до замовлення в KeyCRM", {
-        orderId,
-        orderNumber: orderNum,
-        keycrmOrderId: order.keycrmOrderId,
-        keycrmPaymentId: result?.id,
-        paymentMethodId,
-        amountUAH,
+      logger.info("syncPaymentToKeyCRM: оплату прикріплено", {
+        orderId, orderNumber: orderNum, keycrmOrderId: order.keycrmOrderId,
+        keycrmPaymentId: result?.id, paymentMethodId, amountUAH, action: "attached",
       });
+
+      // Верифікація: перевірити що оплата з'явилась
+      try {
+        const verify = await this.client.request<{ payments?: Array<{ id: number; status: string }> }>(
+          "GET",
+          `/order/${order.keycrmOrderId}?include=payments`,
+          undefined, "order", orderId
+        );
+        const paidPayments = verify.payments?.filter((p) => p.status === "paid") || [];
+        if (paidPayments.length === 0) {
+          logger.error("syncPaymentToKeyCRM: ВЕРИФІКАЦІЯ НЕВДАЛА — оплата не знайдена після прикріплення", {
+            orderId, keycrmOrderId: order.keycrmOrderId, paymentsCount: verify.payments?.length || 0,
+          });
+        }
+      } catch { /* верифікація не критична */ }
     } catch (error) {
-      logger.error("Не вдалося прикріпити оплату в KeyCRM", {
-        orderId,
-        keycrmOrderId: order.keycrmOrderId,
-        error: error instanceof Error ? error.message : String(error),
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error("syncPaymentToKeyCRM: не вдалося прикріпити оплату", {
+        orderId, keycrmOrderId: order.keycrmOrderId, error: msg,
+      });
+      // Позначити для retry
+      await OrderRepository.updateKeycrmSync(orderId, {
+        keycrmSyncStatus: "failed",
+        keycrmSyncError: `Payment attach: ${msg.substring(0, 400)}`,
+        keycrmSyncRetries: { increment: 1 },
       });
     }
+  }
+
+  /** @deprecated Використовуйте syncPaymentToKeyCRM замість attachPayment */
+  async attachPayment(orderId: string): Promise<void> {
+    return this.syncPaymentToKeyCRM(orderId);
   }
 
   /**
@@ -291,14 +366,20 @@ export class KeyCRMService {
       const order = await OrderRepository.findById(orderId);
       if (!order) return { success: false, error: "Order not found" };
 
-      // If payment failed/refunded and order exists in KeyCRM — sync reversal, not create
+      // Refund/cancel → sync reversal
       const isRefundable = ["failed", "refunded", "cancelled", "prepayment_failed"].includes(order.paymentStatus);
       if (isRefundable && order.keycrmOrderId) {
         await this.syncPaymentReversal(orderId);
         return { success: true };
       }
 
-      // Otherwise create/sync order
+      // Paid order → централізована синхронізація оплати
+      if (["paid", "partial_paid"].includes(order.paymentStatus)) {
+        await this.syncPaymentToKeyCRM(orderId);
+        return { success: true };
+      }
+
+      // Інше (unpaid, pending) → створити замовлення
       await this.createOrder(orderId);
       return { success: true };
     } catch (error) {
