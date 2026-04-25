@@ -15,6 +15,7 @@ export async function Header() {
   let logoUrl: string | null = null;
   let siteName = SITE_NAME;
   let showNameOnMobile = true;
+  let mobileTitle = "";
   let phoneEnabled = true;
   let phoneText = "";
   let phoneNumber = "";
@@ -27,7 +28,7 @@ export async function Header() {
       PageRepository.findForMobile(),
       prisma.settings.findMany({
         where: { key: { in: [
-          "site_logo_url", "site_name",
+          "site_logo_url", "site_name", "site_mobile_title",
           "header_show_site_name_mobile",
           "topbar_phone", "topbar_phone_label", "topbar_phone_link_type", "topbar_show_phone",
         ] } },
@@ -42,6 +43,7 @@ export async function Header() {
       switch (s.key) {
         case "site_logo_url": logoUrl = v || null; break;
         case "site_name": if (v) siteName = v; break;
+        case "site_mobile_title": mobileTitle = v; break;
         case "header_show_site_name_mobile": showNameOnMobile = v !== "false"; break;
         case "topbar_phone": phoneNumber = v; break;
         case "topbar_phone_label": phoneText = v; break;
@@ -66,7 +68,7 @@ export async function Header() {
               phoneNumber={phoneNumber}
               phoneLinkType={phoneLinkType}
             />
-            <Logo logoUrl={logoUrl} siteName={siteName} showNameOnMobile={showNameOnMobile} />
+            <Logo logoUrl={logoUrl} siteName={siteName} mobileTitle={mobileTitle} showNameOnMobile={showNameOnMobile} />
             <Navigation categories={categories} pages={headerPages} />
           </div>
           <div className="flex items-center gap-1">
