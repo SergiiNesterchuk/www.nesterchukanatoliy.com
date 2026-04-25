@@ -22,8 +22,9 @@ export type PublicOrderStatus = "new" | "approval" | "production" | "delivery" |
  * Most status_ids should be resolved dynamically via API + name matching.
  */
 export const KEYCRM_STATUS_ID_OVERRIDES: Record<number, PublicOrderStatus> = {
-  // Verified from production logs:
+  // Verified from production webhook logs:
   19: "cancelled",  // "Скасовано" — confirmed by manual cancel test, group_id=6
+  20: "approval",   // "Прийнято" — confirmed from early webhook logs, group_id=2
 };
 
 // ---------------------------------------------------------------------------
