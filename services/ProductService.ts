@@ -45,6 +45,7 @@ export class ProductService {
     quantity: number | null;
     images: { url: string }[];
     category: { name: string; slug: string };
+    _count?: { reviews: number };
   }): ProductListItem {
     return {
       id: product.id,
@@ -56,6 +57,7 @@ export class ProductService {
       stockStatus: product.stockStatus,
       quantity: product.quantity,
       coverImage: product.images[0]?.url ?? null,
+      reviewCount: product._count?.reviews ?? 0,
       category: product.category,
     };
   }

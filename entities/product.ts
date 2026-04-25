@@ -15,6 +15,7 @@ export interface ProductListItem {
   stockStatus: string;
   quantity: number | null;
   coverImage: string | null;
+  reviewCount: number;
   category: {
     name: string;
     slug: string;

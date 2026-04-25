@@ -10,20 +10,39 @@ const reviewSchema = z.object({
   text: z.string().min(10, "Мінімум 10 символів").max(2000),
 });
 
-// GET: approved reviews for a product
+// GET: approved reviews with pagination + stats
 export async function GET(request: NextRequest) {
   const productId = request.nextUrl.searchParams.get("productId");
-  if (!productId) return NextResponse.json({ success: true, data: [] });
+  if (!productId) return NextResponse.json({ success: true, data: [], stats: null });
 
-  const reviews = await prisma.productReview.findMany({
-    where: { productId, status: "approved" },
-    orderBy: [{ displayDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
-    select: {
-      id: true, customerName: true, rating: true, text: true, displayDate: true, createdAt: true,
+  const limit = parseInt(request.nextUrl.searchParams.get("limit") || "5", 10);
+  const offset = parseInt(request.nextUrl.searchParams.get("offset") || "0", 10);
+
+  const [reviews, total, stats] = await Promise.all([
+    prisma.productReview.findMany({
+      where: { productId, status: "approved" },
+      orderBy: [{ displayDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      select: { id: true, customerName: true, rating: true, text: true, displayDate: true, createdAt: true },
+      skip: offset,
+      take: limit,
+    }),
+    prisma.productReview.count({ where: { productId, status: "approved" } }),
+    prisma.productReview.aggregate({
+      where: { productId, status: "approved" },
+      _avg: { rating: true },
+      _count: true,
+    }),
+  ]);
+
+  return NextResponse.json({
+    success: true,
+    data: reviews,
+    stats: {
+      averageRating: stats._avg.rating ? Math.round(stats._avg.rating * 10) / 10 : 0,
+      totalCount: stats._count,
     },
+    pagination: { total, limit, offset, hasMore: offset + limit < total },
   });
-
-  return NextResponse.json({ success: true, data: reviews });
 }
 
 // POST: submit new review (pending moderation)

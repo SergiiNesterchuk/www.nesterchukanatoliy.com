@@ -4,6 +4,7 @@ import type { SortOption } from "@/shared/constants";
 const productWithImages = {
   images: { orderBy: { sortOrder: "asc" as const } },
   category: { select: { id: true, name: true, slug: true } },
+  _count: { select: { reviews: { where: { status: "approved" as const } } } },
 };
 
 export class ProductRepository {
