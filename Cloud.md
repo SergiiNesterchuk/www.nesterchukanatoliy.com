@@ -248,17 +248,21 @@ https://wwwnesterchukanatoliycom-production.up.railway.app/api/webhooks/keycrm/o
 ```
 Top-level keys are `event` (string) and `context` (object with at least `id`).
 
-**Strategy:** webhook is used as a **trigger** — handler extracts `context.id` (KeyCRM order ID), then fetches the full order via `GET /order/{id}` from KeyCRM API to get current status, tracking, and payment data. This ensures we always have complete, up-to-date information regardless of what the webhook payload contains.
+**Strategy: unified snapshot sync.** ANY webhook → extract `context.id` (KeyCRM order ID) → `GET /order/{id}?include=payments` from KeyCRM API → sync ALL dimensions in one pass:
+- Order status (6 global statuses)
+- Payment status (from payments array + payment_status field)
+- Delivery status + tracking/TTN
 
-**Event handling:**
+No separate event routing. Every webhook triggers the same full sync. This prevents scenarios where status changes are classified as one type but carry data for another.
 
-| Event name pattern | Classification | Behavior |
-|-----------|-----------|----------|
-| `order.*`, `status.*`, empty | Order event | Fetch order from API → map status → update Order + OrderStatusHistory + delivery/TTN |
-| `payment.*`, `invoice.*` | Payment event | Fetch order from API → update `paymentStatus` if changed |
-| Anything else | Unsupported | Log in IntegrationLog, return 200 |
+**Field extraction:** tries multiple paths for each field:
+- **Status:** `status.name`, `status` (string), `status_id`, `status_name`, `current_status`
+- **Tracking:** `tracking_code`, `ttn`, `tracking_number`, `shipping.tracking_code`, `delivery.tracking_code`, `deliveries[0].tracking_code`
+- **Payment:** `payments` array (amount/status) + `payment_status` field as fallback
 
-**Idempotency:** duplicate webhook with the same status does NOT create duplicate history entries. Checks both public status AND KeyCRM sub-status name AND tracking number.
+**Debug logging:** the handler logs the KeyCRM API response shape (top-level keys, status type/value, tracking fields found) to diagnose any field mapping issues.
+
+**Idempotency:** each dimension is checked independently — duplicate webhook with unchanged values does NOT create duplicate history entries.
 
 **Error handling:** handler never returns 500 to KeyCRM. Internal errors are logged and return 200 to prevent retry storms.
 

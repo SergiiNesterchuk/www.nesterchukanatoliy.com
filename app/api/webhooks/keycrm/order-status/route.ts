@@ -4,19 +4,16 @@ import { createLogger } from "@/shared/logger";
 import { mapKeycrmToPublicStatus } from "@/shared/keycrm-status-map";
 import { IntegrationLogRepository } from "@/repositories/IntegrationLogRepository";
 
-const logger = createLogger("KeyCRM:Webhook:OrderStatus");
+const logger = createLogger("KeyCRM:Webhook");
 const ENDPOINT = "/api/webhooks/keycrm/order-status";
 
 /**
  * Production webhook endpoint for KeyCRM.
- * URL configured in KeyCRM:
- *   POST /api/webhooks/keycrm/order-status?secret=KEYCRM_WEBHOOK_SECRET
  *
- * KeyCRM webhook payload structure:
- *   { event: "order.status_changed", context: { id: 3911, ... } }
+ * KeyCRM webhook payload: { event: "...", context: { id: ... } }
  *
- * Strategy: use webhook as trigger → fetch full order from KeyCRM API →
- * update local order status/delivery/tracking.
+ * Strategy: ANY webhook → extract keycrmOrderId → fetch full order from
+ * KeyCRM API → sync ALL dimensions (status + payment + delivery/tracking).
  */
 export async function POST(request: NextRequest) {
   // --- Auth ---
@@ -38,20 +35,17 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // --- Parse KeyCRM webhook structure: { event, context } ---
     const eventName = String(payload.event || "");
     const context = (payload.context || payload) as Record<string, unknown>;
-
-    // Extract KeyCRM order ID from context
     const keycrmOrderId = extractKeycrmOrderId(context, payload);
 
-    logger.info("KeyCRM webhook received", {
+    logger.info("Webhook received", {
       event: eventName,
       keycrmOrderId,
       contextKeys: context ? Object.keys(context) : [],
     });
 
-    // Log the raw webhook for diagnostics (first N webhooks help debug structure)
+    // Log raw webhook payload for diagnostics
     await IntegrationLogRepository.create({
       integration: "keycrm",
       direction: "inbound",
@@ -63,17 +57,13 @@ export async function POST(request: NextRequest) {
       requestBody: sanitizePayloadForLog(payload),
     });
 
-    // --- Route by event name ---
-    const eventType = classifyEvent(eventName);
-
-    switch (eventType) {
-      case "order":
-        return await handleOrderEvent(keycrmOrderId, eventName);
-      case "payment":
-        return await handlePaymentEvent(keycrmOrderId, eventName);
-      default:
-        return await handleUnsupportedEvent(eventName, keycrmOrderId);
+    if (!keycrmOrderId) {
+      logger.warn("Webhook: no order ID found", { event: eventName });
+      return NextResponse.json({ status: "ok", skipped: true, reason: "no_order_id" });
     }
+
+    // --- Unified snapshot sync: fetch order and sync ALL dimensions ---
+    return await syncOrderSnapshot(keycrmOrderId, eventName);
   } catch (error) {
     logger.error("Webhook processing error", {
       error: error instanceof Error ? error.message : String(error),
@@ -89,7 +79,6 @@ export async function POST(request: NextRequest) {
       requestBody: sanitizePayloadForLog(payload),
     });
 
-    // Return 200 to prevent KeyCRM from retrying on our internal errors
     return NextResponse.json({ status: "ok", error: true });
   }
 }
@@ -98,79 +87,27 @@ export async function POST(request: NextRequest) {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Extract KeyCRM order ID from various payload shapes */
 function extractKeycrmOrderId(context: Record<string, unknown>, payload: Record<string, unknown>): string {
-  // context.id is the most common location
-  const id = context?.id || context?.order_id || payload.id || payload.order_id || "";
+  const id = context?.id || context?.order_id || context?.model_id
+    || payload.id || payload.order_id || "";
   return String(id);
 }
 
-/** Sanitize payload for logging — remove sensitive fields, trim length */
 function sanitizePayloadForLog(payload: Record<string, unknown>): string {
   try {
-    const safe = { ...payload };
-    // Remove potentially sensitive nested data
-    if (safe.context && typeof safe.context === "object") {
-      const ctx = { ...(safe.context as Record<string, unknown>) };
-      // Keep structure but truncate large nested objects
-      for (const key of Object.keys(ctx)) {
-        if (typeof ctx[key] === "object" && ctx[key] !== null) {
-          const nested = ctx[key] as Record<string, unknown>;
-          // Keep id/name/status fields, summarize the rest
-          ctx[key] = { _keys: Object.keys(nested), id: nested.id, name: nested.name, status: nested.status };
-        }
-      }
-      safe.context = ctx;
-    }
-    return JSON.stringify(safe).substring(0, 4000);
+    return JSON.stringify(payload, null, 0).substring(0, 4000);
   } catch {
-    return JSON.stringify({ error: "failed to serialize" });
+    return "{}";
   }
 }
 
-/** Classify event name into a category */
-type EventCategory = "order" | "payment" | "unsupported";
-
-function classifyEvent(eventName: string): EventCategory {
-  const lower = eventName.toLowerCase();
-
-  // Order events
-  if (
-    lower.includes("order") ||
-    lower.includes("status") ||
-    lower.includes("замовлення") ||
-    lower === "" // Empty event name — treat as order update (legacy/default)
-  ) {
-    // Check if it's specifically a payment sub-event on an order
-    if (lower.includes("payment") || lower.includes("invoice")) {
-      return "payment";
-    }
-    return "order";
-  }
-
-  // Payment events
-  if (lower.includes("payment") || lower.includes("invoice") || lower.includes("оплат")) {
-    return "payment";
-  }
-
-  return "unsupported";
-}
-
 // ---------------------------------------------------------------------------
-// Order event handler (trigger + fetch from API)
+// Unified snapshot sync
 // ---------------------------------------------------------------------------
 
-async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
-  if (!keycrmOrderId) {
-    logger.warn("Webhook: no order ID in payload", { event: eventName });
-    return NextResponse.json({ status: "ok", skipped: true, reason: "no_order_id" });
-  }
-
-  // Find local order
-  const order = await prisma.order.findFirst({
-    where: { keycrmOrderId },
-  });
-
+async function syncOrderSnapshot(keycrmOrderId: string, eventName: string) {
+  // 1. Find local order
+  const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
   if (!order) {
     logger.warn("Webhook: order not found locally", { keycrmOrderId, event: eventName });
     await IntegrationLogRepository.create({
@@ -185,114 +122,46 @@ async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
     return NextResponse.json({ status: "ok", skipped: true, reason: "order_not_found" });
   }
 
-  // --- Fetch full order from KeyCRM API ---
+  // 2. Fetch full order from KeyCRM API
   const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
   if (!keycrmOrder) {
-    logger.warn("Webhook: failed to fetch order from KeyCRM API", { keycrmOrderId });
+    logger.warn("Webhook: KeyCRM API fetch failed", { keycrmOrderId });
     return NextResponse.json({ status: "ok", skipped: true, reason: "api_fetch_failed" });
   }
 
-  // --- Extract status, tracking, payment from API response ---
-  const statusObj = keycrmOrder.status as Record<string, unknown> | undefined;
-  const keycrmStatusName: string = String(statusObj?.name || keycrmOrder.status_name || "");
-  const keycrmStatusId: number | undefined = (keycrmOrder.status_id as number) || (statusObj?.id as number);
-  const trackingCode: string | null = (keycrmOrder.tracking_code as string) || (keycrmOrder.ttn as string) || null;
+  // 3. Extract ALL fields with robust multi-path extraction + debug logging
+  const extracted = extractOrderFields(keycrmOrder);
 
-  // Map to one of 6 global public statuses
-  const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName);
-  const oldPublicStatus = order.status;
+  logger.info("Webhook: extracted fields from KeyCRM API", {
+    orderId: order.id,
+    orderNumber: order.orderNumber,
+    event: eventName,
+    keycrmStatusId: extracted.statusId,
+    keycrmStatusName: extracted.statusName,
+    trackingCode: extracted.trackingCode,
+    keycrmPaymentStatus: extracted.paymentStatus,
+    paymentsCount: extracted.paymentsCount,
+    // Debug: show what raw fields were found
+    rawStatusType: extracted.debug.statusType,
+    rawStatusKeys: extracted.debug.statusKeys,
+    rawTrackingFields: extracted.debug.trackingFields,
+    rawTopLevelKeys: extracted.debug.topLevelKeys,
+  });
 
-  // Idempotency: skip if same public status AND same KeyCRM sub-status AND same tracking
-  if (
-    oldPublicStatus === newPublicStatus &&
-    order.keycrmStatusName === keycrmStatusName &&
-    (order.trackingNumber || null) === trackingCode
-  ) {
-    logger.info("Webhook: no changes detected, skipping", {
-      orderId: order.id,
-      status: newPublicStatus,
-      keycrmStatus: keycrmStatusName,
-    });
-    return NextResponse.json({ status: "ok", unchanged: true });
-  }
-
-  // Build update data
+  // 4. Sync each dimension independently (no early-return)
   const updateData: Record<string, unknown> = {};
   const historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }> = [];
 
-  // --- Order status change ---
-  if (oldPublicStatus !== newPublicStatus || order.keycrmStatusName !== keycrmStatusName) {
-    updateData.status = newPublicStatus;
-    updateData.keycrmStatusId = keycrmStatusId || null;
-    updateData.keycrmStatusName = keycrmStatusName;
+  // --- A. Order status ---
+  syncOrderStatus(extracted, order, updateData, historyEntries);
 
-    if (oldPublicStatus !== newPublicStatus) {
-      const statusLabels: Record<string, string> = {
-        new: "Нове", approval: "Погодження", production: "Виробництво",
-        delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
-      };
-      historyEntries.push({
-        source: "keycrm_webhook",
-        oldStatus: oldPublicStatus,
-        newStatus: newPublicStatus,
-        message: `Статус змінено: ${statusLabels[newPublicStatus] || keycrmStatusName}`,
-      });
-    }
-  }
+  // --- B. Delivery + Tracking ---
+  syncDeliveryAndTracking(extracted, order, updateData, historyEntries);
 
-  // --- Delivery status updates ---
-  if (newPublicStatus === "delivery" && order.deliveryStatus !== "shipped") {
-    updateData.deliveryStatus = "shipped";
-    if (!order.shippedAt) updateData.shippedAt = new Date();
-    historyEntries.push({
-      source: "delivery",
-      oldStatus: order.deliveryStatus || "pending",
-      newStatus: "shipped",
-      message: trackingCode
-        ? `Замовлення передано в доставку. ТТН: ${trackingCode}`
-        : "Замовлення передано в доставку",
-    });
-  }
-  if (newPublicStatus === "completed" && order.deliveryStatus !== "delivered") {
-    updateData.deliveryStatus = "delivered";
-    if (!order.deliveredAt) updateData.deliveredAt = new Date();
-    historyEntries.push({
-      source: "delivery",
-      oldStatus: order.deliveryStatus || "pending",
-      newStatus: "delivered",
-      message: "Замовлення доставлено",
-    });
-  }
+  // --- C. Payment status ---
+  syncPaymentStatus(keycrmOrder, order, updateData, historyEntries);
 
-  // --- Tracking number update ---
-  if (trackingCode && trackingCode !== order.trackingNumber) {
-    updateData.trackingNumber = trackingCode;
-    if (!historyEntries.some((h) => h.message.includes("ТТН"))) {
-      historyEntries.push({
-        source: "delivery",
-        oldStatus: order.deliveryStatus || "pending",
-        newStatus: order.deliveryStatus || "pending",
-        message: `ТТН: ${trackingCode}`,
-      });
-    }
-  }
-
-  // --- Sync payment status from KeyCRM (if order has payments data) ---
-  const paymentSync = syncPaymentStatusFromKeycrmOrder(
-    keycrmOrder,
-    { paymentStatus: order.paymentStatus, total: order.total, paymentMethod: order.paymentMethod }
-  );
-  if (paymentSync.newPaymentStatus) {
-    updateData.paymentStatus = paymentSync.newPaymentStatus;
-    historyEntries.push({
-      source: "keycrm_webhook",
-      oldStatus: order.paymentStatus,
-      newStatus: paymentSync.newPaymentStatus,
-      message: paymentSync.message,
-    });
-  }
-
-  // --- Apply updates ---
+  // 5. Apply updates
   if (Object.keys(updateData).length > 0) {
     await prisma.order.update({ where: { id: order.id }, data: updateData });
   }
@@ -303,204 +172,269 @@ async function handleOrderEvent(keycrmOrderId: string, eventName: string) {
     });
   }
 
+  // 6. Log result
   await IntegrationLogRepository.create({
     integration: "keycrm",
     direction: "inbound",
     method: "WEBHOOK",
     endpoint: ENDPOINT,
-    entityType: "order",
+    entityType: "order_sync",
     entityId: order.id,
     responseStatus: 200,
   });
 
-  logger.info("Webhook: order updated", {
+  const updated = Object.keys(updateData).length > 0;
+  logger.info(updated ? "Webhook: order synced" : "Webhook: no changes", {
     orderId: order.id,
     orderNumber: order.orderNumber,
     event: eventName,
-    oldStatus: oldPublicStatus,
-    newStatus: newPublicStatus,
-    keycrmStatus: keycrmStatusName,
-    trackingCode,
+    updatedFields: Object.keys(updateData),
     historyCount: historyEntries.length,
   });
 
   return NextResponse.json({
     status: "ok",
-    updated: Object.keys(updateData).length > 0,
-    publicStatus: newPublicStatus,
+    updated,
+    updatedFields: Object.keys(updateData),
   });
 }
 
 // ---------------------------------------------------------------------------
-// Payment event handler
+// Field extraction — try ALL known paths
 // ---------------------------------------------------------------------------
 
-async function handlePaymentEvent(keycrmOrderId: string, eventName: string) {
-  logger.info("Webhook: payment event received", { keycrmOrderId, event: eventName });
+interface ExtractedFields {
+  statusId: number | undefined;
+  statusName: string;
+  trackingCode: string | null;
+  paymentStatus: string;
+  paymentsCount: number;
+  debug: {
+    statusType: string;
+    statusKeys: string[];
+    trackingFields: string[];
+    topLevelKeys: string[];
+  };
+}
 
-  if (!keycrmOrderId) {
-    await IntegrationLogRepository.create({
-      integration: "keycrm",
-      direction: "inbound",
-      method: "WEBHOOK",
-      endpoint: ENDPOINT,
-      entityType: "payment",
-      responseStatus: 200,
-    });
-    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "no_order_id" });
+function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFields {
+  const topLevelKeys = Object.keys(keycrmOrder);
+
+  // --- Status extraction: try multiple paths ---
+  let statusId: number | undefined;
+  let statusName = "";
+  const statusRaw = keycrmOrder.status;
+  let statusType = typeof statusRaw;
+  let statusKeys: string[] = [];
+
+  if (statusRaw && typeof statusRaw === "object" && !Array.isArray(statusRaw)) {
+    // status is an object: { id: N, name: "..." }
+    const statusObj = statusRaw as Record<string, unknown>;
+    statusKeys = Object.keys(statusObj);
+    statusName = String(statusObj.name || statusObj.title || statusObj.label || "");
+    statusId = Number(statusObj.id) || undefined;
+  } else if (typeof statusRaw === "string") {
+    // status is a string (the status name directly)
+    statusName = statusRaw;
+    statusType = "string";
+  } else if (typeof statusRaw === "number") {
+    // status is a number (the status ID directly)
+    statusId = statusRaw;
+    statusType = "number";
   }
 
-  const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
-  if (!order) {
-    await IntegrationLogRepository.create({
-      integration: "keycrm",
-      direction: "inbound",
-      method: "WEBHOOK",
-      endpoint: ENDPOINT,
-      entityType: "payment",
-      entityId: keycrmOrderId,
-      errorMessage: "Order not found locally",
-    });
-    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "order_not_found" });
+  // Fallback: try top-level fields
+  if (!statusName && keycrmOrder.status_name) {
+    statusName = String(keycrmOrder.status_name);
+  }
+  if (!statusId && keycrmOrder.status_id) {
+    statusId = Number(keycrmOrder.status_id) || undefined;
+  }
+  // Also try current_status, workflow_status
+  if (!statusName && keycrmOrder.current_status) {
+    const cs = keycrmOrder.current_status;
+    if (typeof cs === "string") statusName = cs;
+    else if (typeof cs === "object" && cs !== null) statusName = String((cs as Record<string, unknown>).name || "");
   }
 
-  const keycrmOrder = await fetchKeycrmOrder(keycrmOrderId);
-  if (!keycrmOrder) {
-    return NextResponse.json({ status: "ok", event: "payment", skipped: true, reason: "api_fetch_failed" });
+  // --- Tracking extraction: try multiple paths ---
+  const trackingFields: string[] = [];
+  let trackingCode: string | null = null;
+
+  const trackingPaths = [
+    keycrmOrder.tracking_code,
+    keycrmOrder.ttn,
+    keycrmOrder.trackingNumber,
+    keycrmOrder.tracking_number,
+  ];
+
+  // Try nested shipping/delivery objects
+  const shipping = keycrmOrder.shipping as Record<string, unknown> | undefined;
+  if (shipping && typeof shipping === "object") {
+    trackingPaths.push(shipping.tracking_code, shipping.ttn, shipping.tracking_number);
+  }
+  const delivery = keycrmOrder.delivery as Record<string, unknown> | undefined;
+  if (delivery && typeof delivery === "object") {
+    trackingPaths.push(delivery.tracking_code, delivery.ttn, delivery.tracking_number);
   }
 
-  const { newPaymentStatus, paidAmount, message } = syncPaymentStatusFromKeycrmOrder(
-    keycrmOrder,
-    { paymentStatus: order.paymentStatus, total: order.total, paymentMethod: order.paymentMethod }
-  );
-
-  if (newPaymentStatus) {
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { paymentStatus: newPaymentStatus },
-    });
-
-    await prisma.orderStatusHistory.create({
-      data: {
-        orderId: order.id,
-        source: "keycrm_webhook",
-        oldStatus: order.paymentStatus,
-        newStatus: newPaymentStatus,
-        message,
-      },
-    }).catch(() => { /* non-critical */ });
-
-    logger.info("Webhook: payment status synced from KeyCRM", {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
-      oldPaymentStatus: order.paymentStatus,
-      newPaymentStatus,
-      paidAmount,
-      orderTotal: order.total,
-    });
+  // Try deliveries array
+  const deliveries = keycrmOrder.deliveries as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(deliveries) && deliveries.length > 0) {
+    trackingPaths.push(deliveries[0].tracking_code, deliveries[0].ttn, deliveries[0].tracking_number);
   }
 
-  await IntegrationLogRepository.create({
-    integration: "keycrm",
-    direction: "inbound",
-    method: "WEBHOOK",
-    endpoint: ENDPOINT,
-    entityType: "payment",
-    entityId: order.id,
-    responseStatus: 200,
-  });
+  for (const val of trackingPaths) {
+    if (val && typeof val === "string" && val.trim()) {
+      trackingCode = val.trim();
+      break;
+    }
+  }
 
-  return NextResponse.json({
-    status: "ok",
-    event: "payment",
-    updated: !!newPaymentStatus,
-    paymentStatus: newPaymentStatus || order.paymentStatus,
-  });
+  // Log which tracking-related fields exist
+  for (const key of ["tracking_code", "ttn", "trackingNumber", "tracking_number", "shipping", "delivery", "deliveries"]) {
+    if (keycrmOrder[key] !== undefined) trackingFields.push(key);
+  }
+
+  // --- Payment status ---
+  const paymentStatus = String(keycrmOrder.payment_status || "");
+  const payments = keycrmOrder.payments as Array<unknown> | undefined;
+  const paymentsCount = Array.isArray(payments) ? payments.length : 0;
+
+  return {
+    statusId,
+    statusName,
+    trackingCode,
+    paymentStatus,
+    paymentsCount,
+    debug: {
+      statusType,
+      statusKeys,
+      trackingFields,
+      topLevelKeys,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
-// Unsupported event handler
+// Dimension sync: Order status
 // ---------------------------------------------------------------------------
 
-async function handleUnsupportedEvent(eventName: string, keycrmOrderId: string) {
-  logger.info("Webhook: unsupported event type", { event: eventName, keycrmOrderId });
+function syncOrderStatus(
+  extracted: ExtractedFields,
+  order: { id: string; status: string; keycrmStatusName: string | null },
+  updateData: Record<string, unknown>,
+  historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
+) {
+  const { statusId, statusName } = extracted;
 
-  await IntegrationLogRepository.create({
-    integration: "keycrm",
-    direction: "inbound",
-    method: "WEBHOOK",
-    endpoint: ENDPOINT,
-    entityType: "unsupported",
-    entityId: keycrmOrderId || undefined,
-    responseStatus: 200,
-  });
+  // Skip if no status info extracted at all
+  if (!statusName && !statusId) return;
 
-  return NextResponse.json({ status: "ok", event: eventName, skipped: true });
+  const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName);
+  const oldPublicStatus = order.status;
+
+  // Only update if public status or KeyCRM sub-status actually changed
+  if (oldPublicStatus === newPublicStatus && order.keycrmStatusName === statusName) return;
+
+  updateData.status = newPublicStatus;
+  updateData.keycrmStatusId = statusId || null;
+  updateData.keycrmStatusName = statusName;
+
+  if (oldPublicStatus !== newPublicStatus) {
+    const statusLabels: Record<string, string> = {
+      new: "Нове", approval: "Погодження", production: "Виробництво",
+      delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+    };
+    historyEntries.push({
+      source: "keycrm_webhook",
+      oldStatus: oldPublicStatus,
+      newStatus: newPublicStatus,
+      message: `Статус змінено: ${statusLabels[newPublicStatus] || statusName}`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------
-// KeyCRM API: fetch order
+// Dimension sync: Delivery + Tracking
 // ---------------------------------------------------------------------------
 
-async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, unknown> | null> {
-  const apiKey = process.env.KEYCRM_API_KEY;
-  const baseUrl = (process.env.KEYCRM_BASE_URL || "https://openapi.keycrm.app/v1").trim().replace(/\/+$/, "");
+function syncDeliveryAndTracking(
+  extracted: ExtractedFields,
+  order: { id: string; deliveryStatus: string | null; trackingNumber: string | null; shippedAt: Date | null; deliveredAt: Date | null; status: string },
+  updateData: Record<string, unknown>,
+  historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
+) {
+  // Determine effective new public status (might have been updated above)
+  const effectiveStatus = (updateData.status as string) || order.status;
 
-  if (!apiKey) {
-    logger.warn("Webhook: KEYCRM_API_KEY not set, cannot fetch order");
-    return null;
+  // Delivery status from order status
+  if (effectiveStatus === "delivery" && order.deliveryStatus !== "shipped") {
+    updateData.deliveryStatus = "shipped";
+    if (!order.shippedAt) updateData.shippedAt = new Date();
+  }
+  if (effectiveStatus === "completed" && order.deliveryStatus !== "delivered") {
+    updateData.deliveryStatus = "delivered";
+    if (!order.deliveredAt) updateData.deliveredAt = new Date();
   }
 
-  try {
-    const res = await fetch(`${baseUrl}/order/${keycrmOrderId}?include=payments`, {
-      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-    });
+  // Tracking number
+  const { trackingCode } = extracted;
+  if (trackingCode && trackingCode !== order.trackingNumber) {
+    updateData.trackingNumber = trackingCode;
 
-    if (!res.ok) {
-      logger.warn("Webhook: KeyCRM API fetch failed", { keycrmOrderId, httpStatus: res.status });
-      return null;
+    // If tracking appeared and delivery not yet shipped, mark as shipped
+    if (!order.deliveryStatus || order.deliveryStatus === "pending") {
+      updateData.deliveryStatus = "shipped";
+      if (!order.shippedAt) updateData.shippedAt = new Date();
     }
 
-    return await res.json();
-  } catch (e) {
-    logger.error("Webhook: KeyCRM API request error", {
-      keycrmOrderId,
-      error: e instanceof Error ? e.message : String(e),
+    historyEntries.push({
+      source: "delivery",
+      oldStatus: order.deliveryStatus || "pending",
+      newStatus: (updateData.deliveryStatus as string) || order.deliveryStatus || "pending",
+      message: `Замовлення передано в доставку. ТТН: ${trackingCode}`,
     });
-    return null;
+  } else if (updateData.deliveryStatus === "shipped" && !historyEntries.some((h) => h.source === "delivery")) {
+    // Status changed to delivery but no tracking — still add delivery history
+    historyEntries.push({
+      source: "delivery",
+      oldStatus: order.deliveryStatus || "pending",
+      newStatus: "shipped",
+      message: "Замовлення передано в доставку",
+    });
+  } else if (updateData.deliveryStatus === "delivered" && !historyEntries.some((h) => h.message.includes("доставлено"))) {
+    historyEntries.push({
+      source: "delivery",
+      oldStatus: order.deliveryStatus || "pending",
+      newStatus: "delivered",
+      message: "Замовлення доставлено",
+    });
   }
 }
 
 // ---------------------------------------------------------------------------
-// Payment status sync from KeyCRM order data
+// Dimension sync: Payment status
 // ---------------------------------------------------------------------------
 
-interface PaymentSyncResult {
-  newPaymentStatus: string | null; // null = no change
-  paidAmount: number; // in kopiyky
-  message: string;
-}
-
-/**
- * Calculate the correct paymentStatus from KeyCRM order payments.
- * Returns null newPaymentStatus if no change needed.
- */
-function syncPaymentStatusFromKeycrmOrder(
+function syncPaymentStatus(
   keycrmOrder: Record<string, unknown>,
-  localOrder: { paymentStatus: string; total: number; paymentMethod: string }
-): PaymentSyncResult {
+  order: { id: string; paymentStatus: string; total: number; paymentMethod: string },
+  updateData: Record<string, unknown>,
+  historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
+) {
   const payments = keycrmOrder.payments as Array<Record<string, unknown>> | undefined;
-  const orderTotal = localOrder.total; // in kopiyky
+  const keycrmPaymentStatus = String(keycrmOrder.payment_status || "");
 
-  // Calculate paid/refunded amounts from KeyCRM payments
-  let paidAmount = 0; // kopiyky
+  // Calculate paid/refunded from payments array
+  let paidAmount = 0;
   let refundedAmount = 0;
   let hasActivePayment = false;
 
   if (payments && Array.isArray(payments)) {
     for (const p of payments) {
       const status = String(p.status || "");
-      const amount = Number(p.amount || 0) * 100; // KeyCRM stores in UAH, we use kopiyky
+      const amount = Number(p.amount || 0) * 100; // UAH → kopiyky
 
       if (status === "paid" || status === "approved") {
         paidAmount += amount;
@@ -511,13 +445,10 @@ function syncPaymentStatusFromKeycrmOrder(
     }
   }
 
-  // Also check KeyCRM's own payment_status as fallback
-  const keycrmPaymentStatus = String(keycrmOrder.payment_status || "");
+  let newPaymentStatus: string | null = null;
+  let message = "";
 
-  let newPaymentStatus: string;
-  let message: string;
-
-  if (paidAmount >= orderTotal) {
+  if (paidAmount >= order.total) {
     newPaymentStatus = "paid";
     message = `Оплату отримано повністю: ${(paidAmount / 100).toFixed(0)} грн`;
   } else if (paidAmount > 0) {
@@ -535,21 +466,72 @@ function syncPaymentStatusFromKeycrmOrder(
   } else if (keycrmPaymentStatus === "refunded") {
     newPaymentStatus = "refunded";
     message = "Кошти повернено";
-  } else {
-    // No active payments — keep current or set to pending
-    // Don't override WayForPay-set statuses (cod_pending, awaiting_prepayment) if KeyCRM says "not_paid"
-    if (keycrmPaymentStatus === "not_paid" && !["pending", "cod_pending", "awaiting_prepayment", "failed", "prepayment_failed"].includes(localOrder.paymentStatus)) {
+  } else if (keycrmPaymentStatus === "not_paid") {
+    // Only override if current status is something unexpected
+    if (!["pending", "cod_pending", "awaiting_prepayment", "failed", "prepayment_failed"].includes(order.paymentStatus)) {
       newPaymentStatus = "pending";
       message = "Оплата очікується";
-    } else {
-      return { newPaymentStatus: null, paidAmount, message: "" };
     }
   }
 
-  // Only return change if status actually differs
-  if (newPaymentStatus === localOrder.paymentStatus) {
-    return { newPaymentStatus: null, paidAmount, message: "" };
+  if (newPaymentStatus && newPaymentStatus !== order.paymentStatus) {
+    updateData.paymentStatus = newPaymentStatus;
+    historyEntries.push({
+      source: "keycrm_webhook",
+      oldStatus: order.paymentStatus,
+      newStatus: newPaymentStatus,
+      message,
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// KeyCRM API: fetch order with payments
+// ---------------------------------------------------------------------------
+
+async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, unknown> | null> {
+  const apiKey = process.env.KEYCRM_API_KEY;
+  const baseUrl = (process.env.KEYCRM_BASE_URL || "https://openapi.keycrm.app/v1").trim().replace(/\/+$/, "");
+
+  if (!apiKey) {
+    logger.warn("Webhook: KEYCRM_API_KEY not set");
+    return null;
   }
 
-  return { newPaymentStatus, paidAmount, message };
+  try {
+    const url = `${baseUrl}/order/${keycrmOrderId}?include=payments`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      logger.warn("Webhook: KeyCRM API fetch failed", { keycrmOrderId, httpStatus: res.status });
+      return null;
+    }
+
+    const data = await res.json();
+
+    // Debug: log top-level keys and status shape for diagnostics
+    logger.info("Webhook: KeyCRM API response shape", {
+      keycrmOrderId,
+      topKeys: Object.keys(data),
+      statusType: typeof data.status,
+      statusValue: typeof data.status === "object" ? JSON.stringify(data.status).substring(0, 200) : String(data.status || ""),
+      hasTrackingCode: !!data.tracking_code,
+      hasTtn: !!data.ttn,
+      hasShipping: !!data.shipping,
+      hasDelivery: !!data.delivery,
+      hasDeliveries: !!data.deliveries,
+      paymentStatus: data.payment_status,
+      paymentsCount: Array.isArray(data.payments) ? data.payments.length : 0,
+    });
+
+    return data;
+  } catch (e) {
+    logger.error("Webhook: KeyCRM API error", {
+      keycrmOrderId,
+      error: e instanceof Error ? e.message : String(e),
+    });
+    return null;
+  }
 }
