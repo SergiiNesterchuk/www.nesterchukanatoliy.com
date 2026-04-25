@@ -423,7 +423,7 @@ Customer account shows 3 separate status blocks: Order, Payment, Delivery.
 | Value | Customer label | Color |
 |-------|---------------|-------|
 | `new` | Нове замовлення | Yellow |
-| `approval` | Погодження | Yellow |
+| `approval` | Готується до відправки | Yellow |
 | `production` | Виробництво | Blue |
 | `delivery` | Доставка | Blue |
 | `completed` | Виконано | Green |
@@ -449,14 +449,20 @@ KeyCRM sub-statuses are stored in `keycrmStatusName` for diagnostics but never s
 
 **3. Delivery Status:**
 
-| Value | Customer label |
-|-------|---------------|
-| `pending` / null | Очікує відправки |
-| `preparing` | Готується |
-| `shipped` | Відправлено |
-| `in_transit` | В дорозі |
-| `delivered` | Доставлено |
-| `returned` | Повернено |
+| Value | Customer label | Source |
+|-------|---------------|--------|
+| `pending` / null | Очікує відправки | Default |
+| `preparing` | Готується до відправки | KeyCRM delivery status |
+| `shipped` | Відправлено | Order status "Доставка" or TTN appeared |
+| `in_transit` | В дорозі | KeyCRM/Nova Poshta "У дорозі" |
+| `arrived` | Прибуло у відділення | KeyCRM/Nova Poshta "Прибуло" |
+| `delivered` | Доставлено | Order status "Виконано" or NP "Доставлено" |
+| `returned` | Повернення | NP "Повернення" |
+| `delivery_issue` | Проблема з доставкою | NP "Проблема доставки" |
+
+Delivery status is extracted from KeyCRM order fields: `delivery_status`, `shipping_status`, `shipping.status`, `delivery.status`, `deliveries[0].status`, `shipments[0].status`. If no explicit delivery status, it's inferred from order status and tracking number.
+
+**Nova Poshta tracking link:** if `trackingNumber` is a 14-digit number, a "Відстежити" button links to `novaposhta.ua/tracking/`.
 
 **4. Internal fields (admin only, NOT shown to customers):**
 

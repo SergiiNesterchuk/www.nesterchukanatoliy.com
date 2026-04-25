@@ -8,7 +8,7 @@ import { ShoppingBag } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
-  new: "Нове", approval: "Погодження", production: "Виробництво",
+  new: "Нове", approval: "Готується", production: "Виробництво",
   delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
   confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
   shipped: "Відправлено", delivered: "Доставлено",

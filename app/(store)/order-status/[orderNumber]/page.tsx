@@ -30,7 +30,7 @@ interface OrderDetail {
 
 // -- Order statuses (6 global + legacy) --
 const ORDER_LABELS: Record<string, string> = {
-  new: "Нове замовлення", approval: "Погодження", production: "Виробництво",
+  new: "Нове замовлення", approval: "Готується до відправки", production: "Виробництво",
   delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
   confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
   shipped: "Відправлено", delivered: "Доставлено",
@@ -47,15 +47,17 @@ const PAYMENT_LABELS: Record<string, string> = {
 
 // -- Delivery statuses --
 const DELIVERY_LABELS: Record<string, string> = {
-  pending: "Очікує відправки", preparing: "Готується",
+  pending: "Очікує відправки", preparing: "Готується до відправки",
   shipped: "Відправлено", in_transit: "В дорозі",
-  delivered: "Доставлено", returned: "Повернено",
+  arrived: "Прибуло у відділення", delivered: "Доставлено",
+  returned: "Повернення", delivery_issue: "Проблема з доставкою",
 };
 
 function statusColor(s: string) {
   if (["paid", "completed", "delivered", "partial_paid"].includes(s)) return "text-green-600 bg-green-50";
   if (["cancelled", "failed", "refunded", "prepayment_failed"].includes(s)) return "text-red-600 bg-red-50";
-  if (["delivery", "shipped", "production", "processing", "in_transit", "preparing"].includes(s)) return "text-blue-600 bg-blue-50";
+  if (["delivery", "shipped", "production", "processing", "in_transit", "preparing", "arrived"].includes(s)) return "text-blue-600 bg-blue-50";
+  if (["delivery_issue", "returned"].includes(s) && !["cancelled", "failed", "refunded", "prepayment_failed"].includes(s)) return "text-orange-600 bg-orange-50";
   return "text-yellow-600 bg-yellow-50";
 }
 
@@ -170,10 +172,22 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
-        {/* Tracking number */}
+        {/* Tracking number + Nova Poshta link */}
         {order.trackingNumber && (
-          <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700">
-            <strong>ТТН:</strong> <span className="font-mono">{order.trackingNumber}</span>
+          <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700 flex items-center justify-between gap-2">
+            <div>
+              <strong>ТТН:</strong> <span className="font-mono">{order.trackingNumber}</span>
+            </div>
+            {/^\d{14}$/.test(order.trackingNumber) && (
+              <a
+                href={`https://novaposhta.ua/tracking/?cargo_number=${order.trackingNumber}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors flex-shrink-0"
+              >
+                Відстежити
+              </a>
+            )}
           </div>
         )}
 

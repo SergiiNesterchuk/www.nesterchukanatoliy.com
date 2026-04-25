@@ -45,8 +45,10 @@ export const DELIVERY_STATUS_LABELS: Record<string, string> = {
   preparing: "Готується до відправки",
   shipped: "Відправлено",
   in_transit: "В дорозі",
+  arrived: "Прибуло у відділення",
   delivered: "Доставлено",
-  returned: "Повернено відправнику",
+  returned: "Повернення",
+  delivery_issue: "Проблема з доставкою",
 };
 
 // ---------------------------------------------------------------------------
@@ -99,8 +101,10 @@ const PAYMENT_HISTORY_LABELS: Record<string, string> = {
 const DELIVERY_HISTORY_LABELS: Record<string, string> = {
   shipped: "Замовлення відправлено",
   in_transit: "Замовлення в дорозі",
+  arrived: "Замовлення прибуло у відділення",
   delivered: "Замовлення доставлено",
-  returned: "Повернено відправнику",
+  returned: "Замовлення повертається",
+  delivery_issue: "Проблема з доставкою",
 };
 
 // ---------------------------------------------------------------------------

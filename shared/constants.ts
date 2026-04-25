@@ -33,7 +33,7 @@ export type SortOption = (typeof SORT_OPTIONS)[number]["value"];
 
 export const ORDER_STATUSES = {
   new: "Нове",
-  approval: "Погодження",
+  approval: "Готується до відправки",
   production: "Виробництво",
   delivery: "Доставка",
   completed: "Виконано",

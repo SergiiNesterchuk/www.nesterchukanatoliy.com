@@ -139,6 +139,7 @@ async function syncOrderSnapshot(keycrmOrderId: string, eventName: string) {
     keycrmStatusId: extracted.statusId,
     keycrmStatusName: extracted.statusName,
     trackingCode: extracted.trackingCode,
+    deliveryStatusRaw: extracted.deliveryStatusRaw,
     keycrmPaymentStatus: extracted.paymentStatus,
     paymentsCount: extracted.paymentsCount,
     // Debug: show what raw fields were found
@@ -207,6 +208,7 @@ interface ExtractedFields {
   statusId: number | undefined;
   statusName: string;
   trackingCode: string | null;
+  deliveryStatusRaw: string; // raw delivery/shipping status from KeyCRM
   paymentStatus: string;
   paymentsCount: number;
   debug: {
@@ -299,6 +301,36 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     if (keycrmOrder[key] !== undefined) trackingFields.push(key);
   }
 
+  // --- Delivery status extraction ---
+  let deliveryStatusRaw = "";
+  const deliveryStatusPaths = [
+    keycrmOrder.delivery_status,
+    keycrmOrder.shipping_status,
+    keycrmOrder.tracking_status,
+    keycrmOrder.current_delivery_status,
+  ];
+  if (shipping && typeof shipping === "object") {
+    deliveryStatusPaths.push((shipping as Record<string, unknown>).status);
+  }
+  if (delivery && typeof delivery === "object") {
+    deliveryStatusPaths.push((delivery as Record<string, unknown>).status);
+  }
+  if (Array.isArray(deliveries) && deliveries.length > 0) {
+    deliveryStatusPaths.push(deliveries[0].status, deliveries[0].delivery_status);
+    // Also try shipments
+  }
+  const shipments = keycrmOrder.shipments as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(shipments) && shipments.length > 0) {
+    deliveryStatusPaths.push(shipments[0].status, shipments[0].delivery_status);
+  }
+
+  for (const val of deliveryStatusPaths) {
+    if (val && typeof val === "string" && val.trim()) {
+      deliveryStatusRaw = val.trim();
+      break;
+    }
+  }
+
   // --- Payment status ---
   const paymentStatus = String(keycrmOrder.payment_status || "");
   const payments = keycrmOrder.payments as Array<unknown> | undefined;
@@ -308,6 +340,7 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     statusId,
     statusName,
     trackingCode,
+    deliveryStatusRaw,
     paymentStatus,
     paymentsCount,
     debug: {
@@ -363,7 +396,7 @@ function syncOrderStatus(
 
   if (oldPublicStatus !== newPublicStatus) {
     const statusLabels: Record<string, string> = {
-      new: "Нове", approval: "Погодження", production: "Виробництво",
+      new: "Нове", approval: "Готується до відправки", production: "Виробництво",
       delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
     };
     historyEntries.push({
@@ -379,56 +412,105 @@ function syncOrderStatus(
 // Dimension sync: Delivery + Tracking
 // ---------------------------------------------------------------------------
 
+/** Map KeyCRM/Nova Poshta delivery status keywords → local deliveryStatus */
+function mapDeliveryStatus(raw: string): string | null {
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+
+  const rules: Array<{ keywords: string[]; status: string }> = [
+    { keywords: ["доставлено", "отримано", "received", "delivered"], status: "delivered" },
+    { keywords: ["прибуло", "очікує отримання", "arrived", "ready for pickup"], status: "arrived" },
+    { keywords: ["у дорозі", "в дорозі", "in transit", "transiting"], status: "in_transit" },
+    { keywords: ["відправлен", "передано в доставку", "передано у доставку", "shipped", "sending"], status: "shipped" },
+    { keywords: ["створена накладна", "створено накладну", "label created"], status: "shipped" },
+    { keywords: ["повернення", "повертається", "returned", "returning"], status: "returned" },
+    { keywords: ["проблема", "не доставлено", "problem", "issue", "failed delivery"], status: "delivery_issue" },
+    { keywords: ["готується", "preparing", "збирається"], status: "preparing" },
+  ];
+
+  for (const rule of rules) {
+    if (rule.keywords.some((kw) => lower.includes(kw))) {
+      return rule.status;
+    }
+  }
+  return null;
+}
+
+const DELIVERY_HISTORY_MAP: Record<string, string> = {
+  preparing: "Замовлення готується до відправки",
+  shipped: "Замовлення відправлено",
+  in_transit: "Замовлення в дорозі",
+  arrived: "Замовлення прибуло у відділення",
+  delivered: "Замовлення доставлено",
+  returned: "Замовлення повертається",
+  delivery_issue: "Проблема з доставкою замовлення",
+};
+
 function syncDeliveryAndTracking(
   extracted: ExtractedFields,
   order: { id: string; deliveryStatus: string | null; trackingNumber: string | null; shippedAt: Date | null; deliveredAt: Date | null; status: string },
   updateData: Record<string, unknown>,
   historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
 ) {
-  // Determine effective new public status (might have been updated above)
   const effectiveStatus = (updateData.status as string) || order.status;
+  const oldDelivery = order.deliveryStatus || "pending";
 
-  // Delivery status from order status
-  if (effectiveStatus === "delivery" && order.deliveryStatus !== "shipped") {
-    updateData.deliveryStatus = "shipped";
-    if (!order.shippedAt) updateData.shippedAt = new Date();
-  }
-  if (effectiveStatus === "completed" && order.deliveryStatus !== "delivered") {
-    updateData.deliveryStatus = "delivered";
-    if (!order.deliveredAt) updateData.deliveredAt = new Date();
+  // --- 1. Try to map delivery status from KeyCRM raw delivery status ---
+  const mappedDelivery = mapDeliveryStatus(extracted.deliveryStatusRaw);
+  let newDelivery: string | null = null;
+
+  if (mappedDelivery && mappedDelivery !== oldDelivery) {
+    newDelivery = mappedDelivery;
   }
 
-  // Tracking number
+  // --- 2. Infer from order status if no explicit delivery status ---
+  if (!newDelivery) {
+    if (effectiveStatus === "delivery" && oldDelivery !== "shipped" && oldDelivery !== "in_transit" && oldDelivery !== "arrived") {
+      newDelivery = "shipped";
+    }
+    if (effectiveStatus === "completed" && oldDelivery !== "delivered") {
+      newDelivery = "delivered";
+    }
+  }
+
+  // --- 3. Tracking number ---
   const { trackingCode } = extracted;
+  let trackingChanged = false;
   if (trackingCode && trackingCode !== order.trackingNumber) {
     updateData.trackingNumber = trackingCode;
+    trackingChanged = true;
 
-    // If tracking appeared and delivery not yet shipped, mark as shipped
-    if (!order.deliveryStatus || order.deliveryStatus === "pending") {
-      updateData.deliveryStatus = "shipped";
-      if (!order.shippedAt) updateData.shippedAt = new Date();
+    // If tracking appeared and no delivery status yet, mark shipped
+    if (!newDelivery && (oldDelivery === "pending" || !order.deliveryStatus)) {
+      newDelivery = "shipped";
+    }
+  }
+
+  // --- 4. Apply delivery status ---
+  if (newDelivery) {
+    updateData.deliveryStatus = newDelivery;
+    if (newDelivery === "shipped" && !order.shippedAt) updateData.shippedAt = new Date();
+    if (newDelivery === "delivered" && !order.deliveredAt) updateData.deliveredAt = new Date();
+
+    // Build history message
+    let message = DELIVERY_HISTORY_MAP[newDelivery] || `Статус доставки: ${newDelivery}`;
+    if (trackingChanged && trackingCode && (newDelivery === "shipped" || newDelivery === "preparing")) {
+      message = `Замовлення передано в доставку. ТТН: ${trackingCode}`;
     }
 
     historyEntries.push({
       source: "delivery",
-      oldStatus: order.deliveryStatus || "pending",
-      newStatus: (updateData.deliveryStatus as string) || order.deliveryStatus || "pending",
-      message: `Замовлення передано в доставку. ТТН: ${trackingCode}`,
+      oldStatus: oldDelivery,
+      newStatus: newDelivery,
+      message,
     });
-  } else if (updateData.deliveryStatus === "shipped" && !historyEntries.some((h) => h.source === "delivery")) {
-    // Status changed to delivery but no tracking — still add delivery history
+  } else if (trackingChanged && trackingCode) {
+    // Only tracking changed, no delivery status change
     historyEntries.push({
       source: "delivery",
-      oldStatus: order.deliveryStatus || "pending",
-      newStatus: "shipped",
-      message: "Замовлення передано в доставку",
-    });
-  } else if (updateData.deliveryStatus === "delivered" && !historyEntries.some((h) => h.message.includes("доставлено"))) {
-    historyEntries.push({
-      source: "delivery",
-      oldStatus: order.deliveryStatus || "pending",
-      newStatus: "delivered",
-      message: "Замовлення доставлено",
+      oldStatus: oldDelivery,
+      newStatus: oldDelivery,
+      message: `ТТН: ${trackingCode}`,
     });
   }
 }
@@ -542,6 +624,8 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
       hasShipping: !!data.shipping,
       hasDelivery: !!data.delivery,
       hasDeliveries: !!data.deliveries,
+      hasShipments: !!data.shipments,
+      deliveryStatus: data.delivery_status || data.shipping_status || null,
       paymentStatus: data.payment_status,
       paymentsCount: Array.isArray(data.payments) ? data.payments.length : 0,
     });

@@ -100,7 +100,7 @@ export function mapKeycrmToPublicStatus(statusId?: number, statusName?: string):
 /** Human-readable labels for public statuses (Ukrainian) */
 export const PUBLIC_STATUS_LABELS: Record<PublicOrderStatus, string> = {
   new: "Нове",
-  approval: "Погодження",
+  approval: "Готується до відправки",
   production: "Виробництво",
   delivery: "Доставка",
   completed: "Виконано",
