@@ -169,7 +169,7 @@ export class KeyCRMMapper {
     const isCodPrepayment = order.paymentPurpose === "cod_prepayment";
     const fullPaymentMethodId = this.getPaymentMethodId(order.paymentMethod, order.paymentPurpose);
     const prepaymentMethodId = this.getPaymentMethodId(order.paymentMethod, "cod_prepayment");
-    const codMethodId = parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "16", 10);
+    const codMethodId = parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "17", 10);
 
     if (order.paymentStatus === "paid" && !isCodPrepayment) {
       // 100% онлайн-оплата — ID 8
@@ -278,7 +278,7 @@ export class KeyCRMMapper {
       return parseInt(process.env.KEYCRM_PAYMENT_METHOD_CARD_ID || "8", 10);
     }
     // Fallback для COD без передплати — використовуємо ID 16 (cash_on_delivery)
-    return parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "16", 10);
+    return parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "17", 10);
   }
 
   /** Перевірка чи метод оплати = WayForPay (будь-який варіант назви) */

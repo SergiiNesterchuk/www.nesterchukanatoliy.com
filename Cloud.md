@@ -466,12 +466,12 @@ railway run pg_dump $DATABASE_URL > backup.sql
 **Сайт використовує:**
 - **ID 8** = 100% онлайн-оплата WayForPay (full_payment)
 - **ID 12** = Передплата 200 грн WayForPay (cod_prepayment)
-- **ID 16** = Накладений платіж / COD (решта при отриманні)
+- **ID 17** = Накладений платіж з Нової Пошти (решта при отриманні)
 
 Env variables:
 - `KEYCRM_PAYMENT_METHOD_CARD_ID=8` (100% оплата)
 - `KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID=12` (передплата 200 грн)
-- `KEYCRM_PAYMENT_METHOD_COD_ID=16` (COD решта)
+- `KEYCRM_PAYMENT_METHOD_COD_ID=17` (накладений платіж НП)
 
 ### Як отримати актуальний список методів
 
@@ -527,7 +527,7 @@ Authorization: Bearer {KEYCRM_API_KEY}
 ```json
 [
   { "payment_method_id": 12, "amount": 200, "status": "not_paid", "description": "WayForPay передплата. Замовлення сайту: K-5018" },
-  { "payment_method_id": 16, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
+  { "payment_method_id": 17, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
 ]
 ```
 
@@ -535,7 +535,7 @@ Authorization: Bearer {KEYCRM_API_KEY}
 ```json
 [
   { "payment_method_id": 12, "amount": 200, "status": "paid", "description": "WayForPay передплата 200 грн. WayForPay: txId456. Замовлення сайту: K-5018" },
-  { "payment_method_id": 16, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
+  { "payment_method_id": 17, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
 ]
 ```
 
