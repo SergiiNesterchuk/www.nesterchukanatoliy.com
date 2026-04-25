@@ -8,8 +8,10 @@ interface LogoProps {
 }
 
 export function Logo({ logoUrl, siteName = "Нестерчук Анатолій", mobileTitle, showNameOnMobile = true }: LogoProps) {
+  const mobileName = mobileTitle || siteName;
+
   return (
-    <Link href="/" className="flex items-center gap-2 group min-w-0">
+    <Link href="/" className="flex items-center gap-2 group min-w-0 flex-1 sm:flex-none">
       {logoUrl ? (
         <img src={logoUrl} alt="Логотип" className="h-10 w-auto object-contain flex-shrink-0" />
       ) : (
@@ -19,17 +21,17 @@ export function Logo({ logoUrl, siteName = "Нестерчук Анатолій"
       )}
       {showNameOnMobile ? (
         <>
-          {/* Mobile: short title with smaller font */}
-          <span className="font-semibold text-gray-900 text-sm truncate max-w-[120px] block sm:hidden">
-            {mobileTitle || siteName}
+          {/* Mobile: uses available space, wraps to 2 lines if needed */}
+          <span className="font-semibold text-gray-900 text-sm leading-tight line-clamp-2 block sm:hidden">
+            {mobileName}
           </span>
-          {/* Desktop: full title */}
-          <span className="font-semibold text-gray-900 hidden sm:block">
+          {/* Desktop: full title, single line */}
+          <span className="font-semibold text-gray-900 hidden sm:block whitespace-nowrap">
             {siteName}
           </span>
         </>
       ) : (
-        <span className="font-semibold text-gray-900 hidden sm:block">
+        <span className="font-semibold text-gray-900 hidden sm:block whitespace-nowrap">
           {siteName}
         </span>
       )}
