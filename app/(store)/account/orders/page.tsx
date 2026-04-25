@@ -10,21 +10,22 @@ export const dynamic = "force-dynamic";
 const STATUS_LABELS: Record<string, string> = {
   new: "Нове", approval: "Погодження", production: "Виробництво",
   delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
-  // Legacy
   confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
-  partial_paid: "Передплата", shipped: "Відправлено", delivered: "Доставлено",
+  shipped: "Відправлено", delivered: "Доставлено",
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
   pending: "Очікує", cod_pending: "При отриманні", awaiting_prepayment: "Очікує передплати",
-  partial_paid: "Передплата", paid: "Оплачено", failed: "Помилка", refunded: "Повернено",
+  partial_paid: "Передплата", paid: "Оплачено",
+  failed: "Не пройшла", prepayment_failed: "Передплата не пройшла",
+  refunded: "Повернено", cancelled: "Скасовано",
 };
 
 function badge(value: string, labels: Record<string, string>) {
   const text = labels[value] || value;
   const color = ["paid", "completed", "delivered", "partial_paid"].includes(value)
-    ? "bg-green-50 text-green-700" : ["failed", "cancelled", "refunded"].includes(value)
-    ? "bg-red-50 text-red-700" : ["delivery", "shipped", "production"].includes(value)
+    ? "bg-green-50 text-green-700" : ["failed", "cancelled", "refunded", "prepayment_failed"].includes(value)
+    ? "bg-red-50 text-red-700" : ["delivery", "shipped", "production", "processing"].includes(value)
     ? "bg-blue-50 text-blue-700" : "bg-yellow-50 text-yellow-700";
   return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>{text}</span>;
 }

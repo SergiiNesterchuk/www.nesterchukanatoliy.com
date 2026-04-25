@@ -165,30 +165,70 @@ async function handleOrderStatusChange(payload: Record<string, unknown>) {
     keycrmStatusName: statusName,
   };
 
+  const historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }> = [];
+
+  // Order status change history
+  if (oldPublicStatus !== newPublicStatus) {
+    const statusLabels: Record<string, string> = {
+      new: "Нове", approval: "Погодження", production: "Виробництво",
+      delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+    };
+    const label = statusLabels[newPublicStatus] || statusName;
+    historyEntries.push({
+      source: "keycrm_webhook",
+      oldStatus: oldPublicStatus,
+      newStatus: newPublicStatus,
+      message: `Статус змінено: ${label}`,
+    });
+  }
+
   if (newPublicStatus === "delivery") {
     updateData.deliveryStatus = "shipped";
-    if (!order.shippedAt) updateData.shippedAt = new Date();
+    if (!order.shippedAt) {
+      updateData.shippedAt = new Date();
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: order.deliveryStatus || "pending",
+        newStatus: "shipped",
+        message: trackingCode
+          ? `Замовлення передано в доставку. ТТН: ${trackingCode}`
+          : "Замовлення передано в доставку",
+      });
+    }
   }
   if (newPublicStatus === "completed") {
     updateData.deliveryStatus = "delivered";
-    if (!order.deliveredAt) updateData.deliveredAt = new Date();
+    if (!order.deliveredAt) {
+      updateData.deliveredAt = new Date();
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: order.deliveryStatus || "pending",
+        newStatus: "delivered",
+        message: "Замовлення доставлено",
+      });
+    }
   }
-  if (trackingCode) {
+  if (trackingCode && trackingCode !== order.trackingNumber) {
     updateData.trackingNumber = trackingCode;
+    // Only add TTN history if not already added by delivery block above
+    if (!historyEntries.some((h) => h.message.includes("ТТН"))) {
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: order.deliveryStatus || "pending",
+        newStatus: order.deliveryStatus || "pending",
+        message: `ТТН: ${trackingCode}`,
+      });
+    }
   }
 
   await prisma.order.update({ where: { id: order.id }, data: updateData });
 
-  // Status history (idempotent: we only reach here if status actually changed)
-  await prisma.orderStatusHistory.create({
-    data: {
-      orderId: order.id,
-      source: "keycrm_webhook",
-      oldStatus: oldPublicStatus,
-      newStatus: newPublicStatus,
-      message: `KeyCRM: ${statusName}`,
-    },
-  });
+  // Write all history entries
+  for (const entry of historyEntries) {
+    await prisma.orderStatusHistory.create({
+      data: { orderId: order.id, ...entry },
+    });
+  }
 
   // Integration log
   await IntegrationLogRepository.create({
@@ -245,6 +285,14 @@ async function handlePaymentEvent(payload: Record<string, unknown>) {
         partially_paid: "partial_paid",
         not_paid: "pending",
         refunded: "refunded",
+        cancelled: "cancelled",
+      };
+      const paymentHistoryLabels: Record<string, string> = {
+        paid: "Замовлення оплачено",
+        partial_paid: "Передплату отримано",
+        pending: "Оплата очікується",
+        refunded: "Кошти повернено",
+        cancelled: "Платіж скасовано",
       };
       const mappedStatus = paymentStatusMap[String(payload.payment_status)];
       if (mappedStatus && mappedStatus !== order.paymentStatus) {
@@ -252,6 +300,18 @@ async function handlePaymentEvent(payload: Record<string, unknown>) {
           where: { id: order.id },
           data: { paymentStatus: mappedStatus },
         });
+
+        // Record payment status change in history
+        await prisma.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            source: "payment_callback",
+            oldStatus: order.paymentStatus,
+            newStatus: mappedStatus,
+            message: paymentHistoryLabels[mappedStatus] || `Статус оплати: ${mappedStatus}`,
+          },
+        }).catch(() => { /* non-critical */ });
+
         logger.info("Webhook: payment status updated", {
           orderId: order.id,
           oldPaymentStatus: order.paymentStatus,

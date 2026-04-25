@@ -53,10 +53,10 @@ export const PAYMENT_STATUSES = {
   partial_paid: "Передплата отримана",
   cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
-  failed: "Помилка оплати",
-  prepayment_failed: "Передплата не завершена",
-  refunded: "Повернено",
-  cancelled: "Скасовано",
+  failed: "Оплата не пройшла",
+  prepayment_failed: "Передплата не пройшла",
+  refunded: "Кошти повернено",
+  cancelled: "Платіж скасовано",
 } as const;
 
 export const CRM_SYNC_STATUSES = {

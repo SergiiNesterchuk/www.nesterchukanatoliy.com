@@ -10,7 +10,7 @@ function sanitizeOrder(order: {
   prepaymentAmount: number | null; currency: string;
   createdAt: Date; shippedAt: Date | null; deliveredAt: Date | null;
   items: Array<{ name: string; sku: string; price: number; quantity: number; lineTotal: number }>;
-  statusHistory: Array<{ newStatus: string; message: string | null; createdAt: Date }>;
+  statusHistory: Array<{ source: string; newStatus: string; message: string | null; createdAt: Date }>;
 }) {
   return {
     orderNumber: order.publicOrderNumber || order.orderNumber,
@@ -33,7 +33,7 @@ function sanitizeOrder(order: {
       name: i.name, sku: i.sku, price: i.price, quantity: i.quantity, lineTotal: i.lineTotal,
     })),
     statusHistory: order.statusHistory.map((h) => ({
-      status: h.newStatus, message: h.message, createdAt: h.createdAt,
+      status: h.newStatus, source: h.source, message: h.message, createdAt: h.createdAt,
     })),
   };
 }

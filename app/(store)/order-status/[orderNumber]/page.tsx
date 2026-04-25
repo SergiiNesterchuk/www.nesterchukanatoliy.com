@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { formatPrice } from "@/shared/money";
 import { Spinner } from "@/components/ui/Spinner";
-import { Package, CreditCard, Truck, Clock, CheckCircle, XCircle, ArrowLeft } from "lucide-react";
+import { Package, CreditCard, Truck, Clock, XCircle, ArrowLeft } from "lucide-react";
 
 interface OrderDetail {
   orderNumber: string;
@@ -25,26 +25,44 @@ interface OrderDetail {
   shippedAt: string | null;
   deliveredAt: string | null;
   items: Array<{ name: string; sku: string; price: number; quantity: number; lineTotal: number }>;
-  statusHistory: Array<{ status: string; message: string | null; createdAt: string }>;
+  statusHistory: Array<{ status: string; source: string; message: string | null; createdAt: string }>;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "Замовлення створено", confirmed: "Підтверджено", processing: "В обробці",
-  paid: "Оплачено", partial_paid: "Передплата отримана", shipped: "Відправлено",
-  delivered: "Доставлено", completed: "Виконано", cancelled: "Скасовано",
+// -- Order statuses (6 global + legacy) --
+const ORDER_LABELS: Record<string, string> = {
+  new: "Нове замовлення", approval: "Погодження", production: "Виробництво",
+  delivery: "Доставка", completed: "Виконано", cancelled: "Скасовано",
+  confirmed: "Підтверджено", processing: "В обробці", paid: "Оплачено",
+  shipped: "Відправлено", delivered: "Доставлено",
 };
 
+// -- Payment statuses (clear refund vs failed) --
 const PAYMENT_LABELS: Record<string, string> = {
   pending: "Очікує оплати", awaiting_prepayment: "Очікує передплати",
   partial_paid: "Передплата отримана", cod_pending: "Оплата при отриманні",
-  paid: "Оплачено", failed: "Помилка оплати", refunded: "Повернено",
+  paid: "Оплачено", failed: "Оплата не пройшла",
+  prepayment_failed: "Передплата не пройшла",
+  refunded: "Кошти повернено", cancelled: "Платіж скасовано",
+};
+
+// -- Delivery statuses --
+const DELIVERY_LABELS: Record<string, string> = {
+  pending: "Очікує відправки", preparing: "Готується",
+  shipped: "Відправлено", in_transit: "В дорозі",
+  delivered: "Доставлено", returned: "Повернено",
 };
 
 function statusColor(s: string) {
   if (["paid", "completed", "delivered", "partial_paid"].includes(s)) return "text-green-600 bg-green-50";
-  if (["cancelled", "failed", "refunded"].includes(s)) return "text-red-600 bg-red-50";
-  if (["shipped", "processing", "confirmed"].includes(s)) return "text-blue-600 bg-blue-50";
+  if (["cancelled", "failed", "refunded", "prepayment_failed"].includes(s)) return "text-red-600 bg-red-50";
+  if (["delivery", "shipped", "production", "processing", "in_transit", "preparing"].includes(s)) return "text-blue-600 bg-blue-50";
   return "text-yellow-600 bg-yellow-50";
+}
+
+/** Format history message for customer (no internal sources visible) */
+function formatHistoryLabel(h: { status: string; source: string; message: string | null }): string {
+  if (h.message) return h.message;
+  return ORDER_LABELS[h.status] || PAYMENT_LABELS[h.status] || h.status;
 }
 
 export default function OrderDetailPage() {
@@ -63,7 +81,6 @@ export default function OrderDetailPage() {
       ? { token }
       : { orderNumber: decodeURIComponent(orderNumber), phone: "", mode: "token_only" };
 
-    // If no token, user needs to use search form
     if (!token) {
       setError("Для перегляду замовлення перейдіть за посиланням з email або знайдіть замовлення через форму пошуку.");
       setLoading(false);
@@ -107,6 +124,7 @@ export default function OrderDetailPage() {
 
   const prepayUAH = order.prepaymentAmount ? order.prepaymentAmount / 100 : 0;
   const remainingUAH = order.prepaymentAmount ? (order.total - order.prepaymentAmount) / 100 : 0;
+  const deliveryStatus = order.deliveryStatus || "pending";
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
@@ -121,18 +139,19 @@ export default function OrderDetailPage() {
           <span className="text-sm text-gray-500">{new Date(order.createdAt).toLocaleDateString("uk-UA")}</span>
         </div>
 
+        {/* 3 status blocks */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="flex items-center gap-2">
-            <Package className="h-5 w-5 text-gray-400" />
+            <Package className="h-5 w-5 text-gray-400 flex-shrink-0" />
             <div>
-              <div className="text-xs text-gray-500">Замовлення</div>
+              <div className="text-xs text-gray-500">Статус замовлення</div>
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(order.status)}`}>
-                {STATUS_LABELS[order.status] || order.status}
+                {ORDER_LABELS[order.status] || order.status}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <CreditCard className="h-5 w-5 text-gray-400" />
+            <CreditCard className="h-5 w-5 text-gray-400 flex-shrink-0" />
             <div>
               <div className="text-xs text-gray-500">Оплата</div>
               <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(order.paymentStatus)}`}>
@@ -141,22 +160,24 @@ export default function OrderDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Truck className="h-5 w-5 text-gray-400" />
+            <Truck className="h-5 w-5 text-gray-400 flex-shrink-0" />
             <div>
               <div className="text-xs text-gray-500">Доставка</div>
-              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(order.deliveryStatus || "pending")}`}>
-                {order.deliveryStatus === "shipped" ? "Відправлено" : order.deliveryStatus === "delivered" ? "Доставлено" : "Очікує"}
+              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${statusColor(deliveryStatus)}`}>
+                {DELIVERY_LABELS[deliveryStatus] || deliveryStatus}
               </span>
             </div>
           </div>
         </div>
 
+        {/* Tracking number */}
         {order.trackingNumber && (
           <div className="mt-4 bg-blue-50 rounded-lg p-3 text-sm text-blue-700">
-            <strong>Трекінг-номер:</strong> <span className="font-mono">{order.trackingNumber}</span>
+            <strong>ТТН:</strong> <span className="font-mono">{order.trackingNumber}</span>
           </div>
         )}
 
+        {/* Prepayment info */}
         {prepayUAH > 0 && (
           <div className="mt-4 bg-orange-50 rounded-lg p-3 text-sm text-orange-700">
             Передплата {prepayUAH} грн отримана. Решта при отриманні: {remainingUAH} грн
@@ -195,13 +216,13 @@ export default function OrderDetailPage() {
       {/* History */}
       {order.statusHistory.length > 0 && (
         <div className="bg-white rounded-xl border p-6 mb-6">
-          <h2 className="font-semibold mb-3">Історія</h2>
+          <h2 className="font-semibold mb-3">Історія замовлення</h2>
           <div className="space-y-3">
             {order.statusHistory.map((h, i) => (
               <div key={i} className="flex items-start gap-3">
                 <Clock className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <div className="text-sm font-medium">{STATUS_LABELS[h.status] || h.message || h.status}</div>
+                  <div className="text-sm font-medium">{formatHistoryLabel(h)}</div>
                   <div className="text-xs text-gray-400">{new Date(h.createdAt).toLocaleString("uk-UA")}</div>
                 </div>
               </div>

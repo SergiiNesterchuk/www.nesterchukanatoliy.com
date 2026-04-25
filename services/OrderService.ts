@@ -276,6 +276,16 @@ export class OrderService {
       const failStatus = order.paymentPurpose === "cod_prepayment" ? "prepayment_failed" : "failed";
       await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: failStatus });
 
+      // Status history for failure
+      try {
+        const failMessage = order.paymentPurpose === "cod_prepayment"
+          ? "Передплата не пройшла"
+          : "Оплата не пройшла";
+        await prisma.orderStatusHistory.create({
+          data: { orderId: order.id, source: "payment_callback", oldStatus: order.paymentStatus, newStatus: failStatus, message: failMessage },
+        });
+      } catch { /* non-critical */ }
+
       // Sync to KeyCRM: reversal if already synced, create if not
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });

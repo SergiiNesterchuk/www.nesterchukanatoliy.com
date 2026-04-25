@@ -388,23 +388,68 @@ Cart → Checkout form → POST /api/checkout
   → User redirected to success page ("Оплата при отриманні")
 ```
 
-### Status Table
+### Status Table — 3 Separate Dimensions
 
-| Status field | Values | Visible to customer? |
-|-------------|--------|---------------------|
-| `status` | **6 global:** new, approval, production, delivery, completed, cancelled | Yes (Ukrainian labels) |
-| `paymentStatus` | pending, cod_pending, awaiting_prepayment, partial_paid, paid, failed, refunded, cancelled | Yes |
-| `deliveryStatus` | null, shipped, in_transit, delivered | Yes |
-| `keycrmSyncStatus` | pending, synced, failed | **No** (admin only) |
-| `keycrmStatusName` | Original KeyCRM sub-status name | **No** (diagnostics only) |
-| `trackingNumber` | null or NP tracking | Yes (when available) |
+Customer account shows 3 separate status blocks: Order, Payment, Delivery.
+
+**1. Order Status (6 global, from KeyCRM mapping):**
+
+| Value | Customer label | Color |
+|-------|---------------|-------|
+| `new` | Нове замовлення | Yellow |
+| `approval` | Погодження | Yellow |
+| `production` | Виробництво | Blue |
+| `delivery` | Доставка | Blue |
+| `completed` | Виконано | Green |
+| `cancelled` | Скасовано | Red |
+
+KeyCRM sub-statuses are stored in `keycrmStatusName` for diagnostics but never shown to customers.
+
+**2. Payment Status:**
+
+| Value | Customer label | Notes |
+|-------|---------------|-------|
+| `pending` | Очікує оплати | |
+| `awaiting_prepayment` | Очікує передплати | COD flow |
+| `partial_paid` | Передплата отримана | COD prepayment 200 UAH |
+| `cod_pending` | Оплата при отриманні | |
+| `paid` | Оплачено | |
+| `failed` | Оплата не пройшла | Payment declined BEFORE charge |
+| `prepayment_failed` | Передплата не пройшла | COD prepayment declined |
+| `refunded` | Кошти повернено | Refund AFTER successful charge |
+| `cancelled` | Платіж скасовано | Payment cancelled |
+
+**Important:** `failed` ≠ `refunded`. `failed` = card declined, no money charged. `refunded` = money was charged then returned.
+
+**3. Delivery Status:**
+
+| Value | Customer label |
+|-------|---------------|
+| `pending` / null | Очікує відправки |
+| `preparing` | Готується |
+| `shipped` | Відправлено |
+| `in_transit` | В дорозі |
+| `delivered` | Доставлено |
+| `returned` | Повернено |
+
+**4. Internal fields (admin only, NOT shown to customers):**
+
+| Field | Values | Purpose |
+|-------|--------|---------|
+| `keycrmSyncStatus` | pending, synced, failed | CRM sync state |
+| `keycrmStatusName` | Original KeyCRM sub-status | Diagnostics |
+| `keycrmStatusId` | KeyCRM status ID | Diagnostics |
+| `trackingNumber` | NP tracking number | Shown to customer when present |
 
 ### Refund/Cancel Flow
 
+**Customer sees:** "Кошти повернено" (refunded) or "Платіж скасовано" (cancelled), NOT "Помилка оплати".
+
 ```
 WayForPay refund/cancel callback
-  → paymentStatus: failed/refunded
+  → paymentStatus: refunded/cancelled (NOT "failed" — that's for declined cards)
   → PaymentEvent recorded
+  → OrderStatusHistory entry: "Кошти повернено" or "Платіж скасовано"
   → If keycrmPaymentId exists:
       → PUT /order/{id}/payment/{paymentId} status:canceled in KeyCRM
   → If no keycrmPaymentId (old orders):
