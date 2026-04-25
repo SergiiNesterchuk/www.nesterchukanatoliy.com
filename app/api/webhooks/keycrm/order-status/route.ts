@@ -219,57 +219,61 @@ function extractOrderFields(data: Record<string, unknown>): ExtractedFields {
   }
 
   // --- Tracking ---
+  // KeyCRM stores TTN inside shipping.shipment_payload array.
+  // Top-level tracking_code/ttn fields do NOT exist in KeyCRM API.
   const trackingFields: string[] = [];
   let trackingCode: string | null = null;
 
+  // 1. Try top-level fields (unlikely but safe)
   const trackingPaths: unknown[] = [
-    data.tracking_code, data.ttn, data.trackingNumber, data.tracking_number,
-    data.delivery_tracking_code, data.shipping_tracking_code,
+    data.tracking_code, data.ttn, data.tracking_number,
   ];
 
-  const tryNested = (obj: unknown, label: string) => {
-    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-      const o = obj as Record<string, unknown>;
-      trackingPaths.push(o.tracking_code, o.ttn, o.tracking_number, o.trackingNumber);
-      if (label) trackingFields.push(label);
-    }
-  };
+  // 2. Try shipping object direct fields
+  const shipping = data.shipping as Record<string, unknown> | undefined;
+  if (shipping && typeof shipping === "object") {
+    trackingFields.push("shipping");
+    trackingPaths.push(shipping.tracking_code, shipping.ttn, shipping.tracking_number);
 
-  tryNested(data.shipping, "shipping");
-  tryNested(data.delivery, "delivery");
-  if (Array.isArray(data.deliveries) && (data.deliveries as unknown[])[0]) {
-    tryNested((data.deliveries as unknown[])[0], "deliveries[0]");
-  }
-  if (Array.isArray(data.shipments) && (data.shipments as unknown[])[0]) {
-    tryNested((data.shipments as unknown[])[0], "shipments[0]");
+    // 3. Parse shipment_payload — this is where KeyCRM stores TTN
+    const shipmentPayload = shipping.shipment_payload;
+    let shipments: Array<Record<string, unknown>> = [];
+
+    if (Array.isArray(shipmentPayload)) {
+      shipments = shipmentPayload as Array<Record<string, unknown>>;
+    } else if (typeof shipmentPayload === "string" && shipmentPayload.startsWith("[")) {
+      try { shipments = JSON.parse(shipmentPayload); } catch { /* not valid JSON */ }
+    }
+
+    if (shipments.length > 0) {
+      trackingFields.push(`shipment_payload[${shipments.length}]`);
+      for (const sp of shipments) {
+        // Try all known TTN field names from Nova Poshta / KeyCRM
+        trackingPaths.push(
+          sp.tracking_code, sp.ttn, sp.tracking_number,
+          sp.invoice_number, sp.declaration_number, sp.cargo_number,
+          sp.document_number, sp.int_doc_number, sp.number,
+        );
+      }
+    }
   }
 
   for (const val of trackingPaths) {
     if (val && typeof val === "string" && val.trim()) { trackingCode = val.trim(); break; }
   }
-  for (const key of ["tracking_code", "ttn", "tracking_number", "delivery_tracking_code", "shipping_tracking_code"]) {
-    if (data[key] !== undefined) trackingFields.push(key);
-  }
 
   // --- Delivery status ---
   let deliveryStatusRaw = "";
-  const dsPaths: unknown[] = [
-    data.delivery_status, data.shipping_status, data.tracking_status, data.current_delivery_status,
-  ];
-  const tryDeliveryNested = (obj: unknown) => {
-    if (obj && typeof obj === "object" && !Array.isArray(obj)) {
-      dsPaths.push((obj as Record<string, unknown>).status);
-    }
-  };
-  tryDeliveryNested(data.shipping);
-  tryDeliveryNested(data.delivery);
-  if (Array.isArray(data.deliveries) && (data.deliveries as unknown[])[0]) {
-    const d0 = (data.deliveries as unknown[])[0] as Record<string, unknown>;
-    dsPaths.push(d0.status, d0.delivery_status);
+  // Check shipping.was_shipped flag
+  if (shipping && shipping.was_shipped === true) {
+    deliveryStatusRaw = "shipped";
   }
-  if (Array.isArray(data.shipments) && (data.shipments as unknown[])[0]) {
-    const s0 = (data.shipments as unknown[])[0] as Record<string, unknown>;
-    dsPaths.push(s0.status, s0.delivery_status);
+  // Try explicit status fields
+  const dsPaths: unknown[] = [
+    data.delivery_status, data.shipping_status,
+  ];
+  if (shipping) {
+    dsPaths.push((shipping as Record<string, unknown>).status);
   }
   for (const val of dsPaths) {
     if (val && typeof val === "string" && val.trim()) { deliveryStatusRaw = val.trim(); break; }
@@ -512,7 +516,9 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
   }
 
   // Cascading fallback: try includes from most to least, stop on first success
+  // Valid includes: payments, shipping, expenses (others return 400)
   const attempts = [
+    `${baseUrl}/order/${keycrmOrderId}?include=payments,shipping`,
     `${baseUrl}/order/${keycrmOrderId}?include=payments`,
     `${baseUrl}/order/${keycrmOrderId}`,
   ];
@@ -525,18 +531,29 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
 
       if (res.ok) {
         const data = await res.json();
+        // Log shipping/TTN structure for diagnostics
+        const shippingObj = data.shipping as Record<string, unknown> | undefined;
+        let shipmentPayloadInfo: unknown = null;
+        if (shippingObj) {
+          const sp = shippingObj.shipment_payload;
+          if (Array.isArray(sp) && sp.length > 0) {
+            shipmentPayloadInfo = { count: sp.length, firstKeys: Object.keys(sp[0] as object), first: JSON.stringify(sp[0]).substring(0, 300) };
+          } else if (typeof sp === "string" && sp.length > 2) {
+            shipmentPayloadInfo = { type: "string", preview: sp.substring(0, 300) };
+          } else {
+            shipmentPayloadInfo = { type: typeof sp, length: Array.isArray(sp) ? sp.length : 0 };
+          }
+        }
+
         logger.info("Webhook: KeyCRM API OK", {
           keycrmOrderId,
-          url: url.replace(apiKey, "***"),
-          topKeys: Object.keys(data),
-          statusType: typeof data.status,
-          statusValue: typeof data.status === "object" ? JSON.stringify(data.status).substring(0, 200) : String(data.status || ""),
-          tracking_code: data.tracking_code || null,
-          ttn: data.ttn || null,
-          hasShipping: !!data.shipping,
-          hasDelivery: !!data.delivery,
+          statusId: data.status_id,
+          statusGroupId: data.status_group_id,
           paymentStatus: data.payment_status,
           paymentsCount: Array.isArray(data.payments) ? data.payments.length : 0,
+          hasShipping: !!data.shipping,
+          wasShipped: shippingObj?.was_shipped ?? null,
+          shipmentPayload: shipmentPayloadInfo,
         });
         return data;
       }

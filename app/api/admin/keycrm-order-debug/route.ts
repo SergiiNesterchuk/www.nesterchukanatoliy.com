@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
           tracking_code: data.tracking_code ?? "MISSING",
           ttn: data.ttn ?? "MISSING",
           tracking_number: data.tracking_number ?? "MISSING",
-          shipping: data.shipping ? summarize(data.shipping) : "MISSING",
+          shipping: data.shipping ? summarizeShipping(data.shipping) : "MISSING",
           delivery: data.delivery ? summarize(data.delivery) : "MISSING",
           deliveries: data.deliveries ? `[${(data.deliveries as unknown[]).length} items]` : "MISSING",
           shipments: data.shipments ? `[${(data.shipments as unknown[]).length} items]` : "MISSING",
@@ -104,5 +104,29 @@ function summarize(obj: unknown): unknown {
       result[key] = `{${Object.keys(val as object).join(",")}}`;
     }
   }
+  return result;
+}
+
+/** Special summarizer for shipping that expands shipment_payload */
+function summarizeShipping(shipping: unknown): unknown {
+  if (!shipping || typeof shipping !== "object") return shipping;
+  const obj = shipping as Record<string, unknown>;
+  const result = summarize(obj) as Record<string, unknown>;
+
+  // Expand shipment_payload to show tracking fields
+  const sp = obj.shipment_payload;
+  if (Array.isArray(sp) && sp.length > 0) {
+    result.shipment_payload = sp.map((item) => summarize(item));
+  } else if (typeof sp === "string" && sp.length > 2) {
+    try {
+      const parsed = JSON.parse(sp);
+      result.shipment_payload = Array.isArray(parsed)
+        ? parsed.map((item: unknown) => summarize(item))
+        : summarize(parsed);
+    } catch {
+      result.shipment_payload = sp.substring(0, 500);
+    }
+  }
+
   return result;
 }
