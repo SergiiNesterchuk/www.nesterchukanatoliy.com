@@ -11,14 +11,66 @@ export const KEYCRM_STATUS_ID_MAP: Record<number, PublicOrderStatus> = {
   // Example: 1: "new", 2: "approval", 3: "production", etc.
 };
 
-/** Map KeyCRM status name keywords → public status (case-insensitive) */
+/**
+ * Map KeyCRM status name keywords → public status (case-insensitive).
+ * Order matters: more specific keywords should come first to avoid
+ * false matches (e.g. "не оплачено" must match cancelled, not approval).
+ */
 const KEYCRM_STATUS_NAME_RULES: Array<{ keywords: string[]; status: PublicOrderStatus }> = [
-  { keywords: ["новий", "новое", "new"], status: "new" },
-  { keywords: ["погодження", "очікування", "прийнято", "узгодження", "підтверджен", "approval", "confirm"], status: "approval" },
-  { keywords: ["виробництво", "виготов", "збирається", "production", "manufacturing"], status: "production" },
-  { keywords: ["доставка", "доставляється", "відправлен", "передано в доставку", "у дорозі", "delivery", "shipped", "transit"], status: "delivery" },
-  { keywords: ["виконано", "доставлено", "завершено", "completed", "delivered", "done"], status: "completed" },
-  { keywords: ["скасовано", "відмінено", "не оплачено", "не влаштувала", "недозвон", "немає в наявності", "cancelled", "canceled", "refund"], status: "cancelled" },
+  // --- cancelled (check FIRST — contains words that could partially match other rules) ---
+  {
+    keywords: [
+      "скасовано", "відмінено", "відмовлено",
+      "не оплачено", "не влаштувала ціна", "не влаштувала доставка",
+      "не влаштувала", "недозвон", "немає в наявності",
+      "cancelled", "canceled", "refund",
+    ],
+    status: "cancelled",
+  },
+  // --- delivery ---
+  {
+    keywords: [
+      "доставка", "доставляється",
+      "відправлен", "передано в доставку", "передано у доставку",
+      "у дорозі", "в дорозі", "створена накладна",
+      "delivery", "shipped", "transit", "sending",
+    ],
+    status: "delivery",
+  },
+  // --- completed ---
+  {
+    keywords: [
+      "виконано", "виконаний",
+      "доставлено", "отримано", "завершено",
+      "completed", "delivered", "done", "finished",
+    ],
+    status: "completed",
+  },
+  // --- production ---
+  {
+    keywords: [
+      "виробництво", "виготов", "виготовлено", "виготовляється",
+      "збирається", "передано у виробництво", "передано в виробництво",
+      "production", "manufacturing", "assembling",
+    ],
+    status: "production",
+  },
+  // --- approval ---
+  {
+    keywords: [
+      "погодження", "прийнято", "прийнятий",
+      "очікування", "узгодження",
+      "підтверджен", "підтверджено",
+      "очікування оплати", "очікує оплати",
+      "approval", "confirm", "accepted", "pending",
+    ],
+    status: "approval",
+  },
+  // --- new (last — least specific) ---
+  {
+    keywords: ["новий", "нове", "новое", "new"],
+    status: "new",
+  },
 ];
 
 /**

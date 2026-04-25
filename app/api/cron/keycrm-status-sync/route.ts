@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     for (const order of orders) {
       try {
-        const res = await fetch(`${baseUrl}/order/${order.keycrmOrderId}`, {
+        const res = await fetch(`${baseUrl}/order/${order.keycrmOrderId}?include=status`, {
           headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
         });
 

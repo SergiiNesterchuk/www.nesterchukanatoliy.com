@@ -212,14 +212,16 @@ Both use the same centralized mapping: `shared/keycrm-status-map.ts` → `mapKey
 
 KeyCRM may have dozens of internal sub-statuses. The site maps ALL of them to exactly 6 public statuses:
 
-| Public status | Label (UA) | KeyCRM keywords matched |
-|---------------|-----------|------------------------|
-| `new` | Нове | новий, new |
-| `approval` | Погодження | погодження, очікування, прийнято, підтверджен, confirm |
-| `production` | Виробництво | виробництво, виготов, збирається, production |
-| `delivery` | Доставка | доставка, відправлен, передано в доставку, shipped, transit |
-| `completed` | Виконано | виконано, доставлено, завершено, completed, delivered |
-| `cancelled` | Скасовано | скасовано, відмінено, недозвон, cancelled, refund |
+| Public status | Label (UA) | KeyCRM status names matched (case-insensitive, keyword match) |
+|---------------|-----------|--------------------------------------------------------------|
+| `cancelled` | Скасовано | скасовано, відмінено, відмовлено, не оплачено, не влаштувала ціна, не влаштувала доставка, недозвон, немає в наявності, cancelled, refund |
+| `delivery` | Доставка | доставка, доставляється, відправлен, передано в доставку, у дорозі, створена накладна, shipped, transit |
+| `completed` | Виконано | виконано, виконаний, доставлено, отримано, завершено, completed, delivered, done |
+| `production` | Виробництво | виробництво, виготов, виготовлено, виготовляється, збирається, передано у виробництво, production, manufacturing |
+| `approval` | Погодження | погодження, прийнято, прийнятий, очікування, узгодження, підтверджен, очікування оплати, очікує оплати, approval, confirm, accepted, pending |
+| `new` | Нове | новий, нове, new |
+
+**Matching order matters:** cancelled is checked first (contains phrases like "не оплачено" that could partially match other rules). Most specific → least specific.
 
 KeyCRM sub-status name is saved in `keycrmStatusName` for diagnostics but is **never shown** to the customer. Customer sees only the global status label.
 

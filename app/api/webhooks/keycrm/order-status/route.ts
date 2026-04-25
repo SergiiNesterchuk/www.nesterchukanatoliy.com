@@ -232,7 +232,9 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     const statusObj = statusRaw as Record<string, unknown>;
     statusKeys = Object.keys(statusObj);
     statusName = String(statusObj.name || statusObj.title || statusObj.label || "");
-    statusId = Number(statusObj.id) || undefined;
+    const rawId = statusObj.id;
+    if (typeof rawId === "number" && rawId > 0) statusId = rawId;
+    else if (typeof rawId === "string" && rawId) statusId = parseInt(rawId, 10) || undefined;
   } else if (typeof statusRaw === "string") {
     // status is a string (the status name directly)
     statusName = statusRaw;
@@ -243,12 +245,13 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     statusType = "number";
   }
 
-  // Fallback: try top-level fields
+  // Fallback: try top-level status_name / status_id
   if (!statusName && keycrmOrder.status_name) {
     statusName = String(keycrmOrder.status_name);
   }
   if (!statusId && keycrmOrder.status_id) {
-    statusId = Number(keycrmOrder.status_id) || undefined;
+    const rawSid = keycrmOrder.status_id;
+    statusId = typeof rawSid === "number" ? rawSid : parseInt(String(rawSid), 10) || undefined;
   }
   // Also try current_status, workflow_status
   if (!statusName && keycrmOrder.current_status) {
@@ -329,10 +332,27 @@ function syncOrderStatus(
   const { statusId, statusName } = extracted;
 
   // Skip if no status info extracted at all
-  if (!statusName && !statusId) return;
+  if (!statusName && !statusId) {
+    logger.warn("syncOrderStatus: no status data extracted", {
+      orderId: order.id,
+      rawStatusType: extracted.debug.statusType,
+      rawStatusKeys: extracted.debug.statusKeys,
+    });
+    return;
+  }
 
   const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName);
   const oldPublicStatus = order.status;
+
+  logger.info("syncOrderStatus: mapping result", {
+    orderId: order.id,
+    keycrmStatusId: statusId,
+    keycrmStatusName: statusName,
+    mappedPublicStatus: newPublicStatus,
+    oldLocalStatus: oldPublicStatus,
+    oldKeycrmStatusName: order.keycrmStatusName,
+    willUpdate: oldPublicStatus !== newPublicStatus || order.keycrmStatusName !== statusName,
+  });
 
   // Only update if public status or KeyCRM sub-status actually changed
   if (oldPublicStatus === newPublicStatus && order.keycrmStatusName === statusName) return;
@@ -499,7 +519,7 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
   }
 
   try {
-    const url = `${baseUrl}/order/${keycrmOrderId}?include=payments`;
+    const url = `${baseUrl}/order/${keycrmOrderId}?include=payments,status`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
     });
