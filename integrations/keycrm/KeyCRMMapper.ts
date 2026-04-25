@@ -187,7 +187,7 @@ export class KeyCRMMapper {
             : `Оплата карткою. Замовлення сайту: ${orderNum}`,
         },
       ];
-    } else if (order.paymentMethod === "card_online") {
+    } else if (this.isWayForPayMethod(order.paymentMethod)) {
       // Інвойс WayForPay створено, ще не оплачено — зберігаємо як not_paid
       keycrmOrder.payments = [
         {
@@ -250,10 +250,16 @@ export class KeyCRMMapper {
   }
 
   // KeyCRM payment method ID 8 = 100% online card payment via WayForPay
+  // Підтримує всі варіанти назви методу: card_online, card_wayforpay, wayforpay
   static getPaymentMethodId(method: string): number | undefined {
-    if (method === "card_online") {
+    if (this.isWayForPayMethod(method)) {
       return parseInt(process.env.KEYCRM_PAYMENT_METHOD_CARD_ID || "8", 10);
     }
     return undefined;
+  }
+
+  /** Перевірка чи метод оплати = WayForPay (будь-який варіант назви) */
+  static isWayForPayMethod(method: string): boolean {
+    return ["card_online", "card_wayforpay", "wayforpay"].includes(method);
   }
 }

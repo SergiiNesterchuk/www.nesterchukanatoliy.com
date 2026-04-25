@@ -115,8 +115,8 @@ export class KeyCRMService {
           keycrmPaymentId = String(payments[0].id);
         }
 
-        // Якщо card_online і payments не створились — прикріпити вручну
-        if (payments.length === 0 && order.paymentMethod === "card_online") {
+        // Якщо WayForPay і payments не створились — прикріпити вручну
+        if (payments.length === 0 && KeyCRMMapper.isWayForPayMethod(order.paymentMethod)) {
           const paymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod);
           const amountUAH = Number(order.total) / 100;
           const isPaid = order.paymentStatus === "paid";
@@ -233,10 +233,19 @@ export class KeyCRMService {
     const txDescription = order.externalPaymentId
       ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
       : `Оплата карткою. Замовлення сайту: ${orderNum}`;
-    // KeyCRM: ТІЛЬКИ payment_method_id (число). Якщо передати payment_method
-    // string — KeyCRM ігнорує ID і ставить "Other" (ID 5).
-    const wpMethodFields = paymentMethodId
-      ? { payment_method_id: paymentMethodId }
+
+    // HARD GUARD: для WayForPay методів payment_method_id ОБОВ'ЯЗКОВИЙ
+    if (!paymentMethodId && KeyCRMMapper.isWayForPayMethod(order.paymentMethod)) {
+      logger.error("CRITICAL: payment_method_id is undefined for WayForPay method", {
+        orderId, orderNumber: orderNum, localPaymentMethod: order.paymentMethod,
+      });
+      // Fallback: використати default ID 8
+      // Це не має відбуватися, але краще відправити з ID ніж без
+    }
+    const effectiveMethodId = paymentMethodId || (KeyCRMMapper.isWayForPayMethod(order.paymentMethod) ? 8 : undefined);
+
+    const wpMethodFields = effectiveMethodId
+      ? { payment_method_id: effectiveMethodId }
       : {};
 
     try {
