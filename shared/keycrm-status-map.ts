@@ -22,8 +22,8 @@ export type PublicOrderStatus = "new" | "approval" | "production" | "delivery" |
  * Most status_ids should be resolved dynamically via API + name matching.
  */
 export const KEYCRM_STATUS_ID_OVERRIDES: Record<number, PublicOrderStatus> = {
-  // Add overrides here if a specific status_id maps incorrectly by name.
-  // Example: 99: "cancelled",  // "Повернення коштів" wrongly matches delivery
+  // Verified from production logs:
+  19: "cancelled",  // "Скасовано" — confirmed by manual cancel test, group_id=6
 };
 
 // ---------------------------------------------------------------------------
