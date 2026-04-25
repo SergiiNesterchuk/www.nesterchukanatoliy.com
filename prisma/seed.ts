@@ -344,8 +344,9 @@ async function main() {
     });
   }
 
-  // Admin user
-  const passwordHash = createHash("sha256").update("Flatronw2242t").digest("hex");
+  // Admin user — пароль з env variable ADMIN_DEFAULT_PASSWORD
+  const adminPassword = process.env.ADMIN_DEFAULT_PASSWORD || "changeme";
+  const passwordHash = createHash("sha256").update(adminPassword).digest("hex");
   await prisma.adminUser.upsert({
     where: { email: "admin@nesterchukanatoliy.com" },
     update: { passwordHash },
