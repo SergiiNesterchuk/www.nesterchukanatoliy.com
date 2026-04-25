@@ -68,18 +68,14 @@ export function MobileMenu({ categories, pages, siteName, phoneEnabled = true, p
               </Link>
 
               {phoneEnabled && phoneNumber && (
-                <>
-                  {phoneLinkType === "viber" && (
-                    <a href={phoneHref} className="flex items-center gap-2 bg-purple-600 text-white rounded-lg px-4 py-2.5 font-medium text-sm">
-                      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.398.002C9.473.028 5.292.344 3.013 2.467 1.258 4.223.518 6.789.39 9.957c-.128 3.168-.298 9.107 5.6 10.765h.003l-.004 2.456s-.036.994.616 1.198c.79.247 1.254-.508 2.01-1.318.414-.444.985-1.095 1.415-1.593 3.904.328 6.905-.42 7.244-.533.783-.26 5.21-.82 5.933-6.694.746-6.054-.358-9.876-2.347-11.593C19.086.95 15.276-.084 11.398.002z"/></svg>
-                      {phoneText || "Написати у Viber"}
-                    </a>
+                <a href={phoneHref} className={`flex items-center gap-2 rounded-lg px-4 py-2.5 font-medium text-sm ${phoneLinkType === "viber" ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-700"}`}>
+                  {phoneLinkType === "viber" ? (
+                    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11.398.002C9.473.028 5.292.344 3.013 2.467 1.258 4.223.518 6.789.39 9.957c-.128 3.168-.298 9.107 5.6 10.765h.003l-.004 2.456s-.036.994.616 1.198c.79.247 1.254-.508 2.01-1.318.414-.444.985-1.095 1.415-1.593 3.904.328 6.905-.42 7.244-.533.783-.26 5.21-.82 5.933-6.694.746-6.054-.358-9.876-2.347-11.593C19.086.95 15.276-.084 11.398.002z"/></svg>
+                  ) : (
+                    <Phone className="h-5 w-5" />
                   )}
-                  <a href={phoneLinkType === "viber" ? `tel:${phoneNumber.replace(/[\s\-\(\)]/g, "")}` : phoneHref} className="flex items-center gap-2 text-gray-600 text-sm">
-                    <Phone className="h-4 w-4" />
-                    {phoneLinkType !== "viber" && phoneText ? phoneText : phoneNumber}
-                  </a>
-                </>
+                  {phoneText ? `${phoneText} ${phoneNumber}` : phoneNumber}
+                </a>
               )}
             </div>
           </div>
