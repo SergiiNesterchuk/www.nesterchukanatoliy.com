@@ -28,10 +28,12 @@ export function normalizeBaseUrl(rawUrl: string): string {
  * Normalizes base URL, ensures single slash between base and path, no %20.
  */
 export function buildAbsoluteUrl(path: string): string {
-  // Priority: RAILWAY_PUBLIC_DOMAIN (always correct on Railway) > SITE_URL > NEXT_PUBLIC_SITE_URL > fallback
-  const raw = (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "")
-    || process.env.SITE_URL
+  // Priority: SITE_URL (custom domain) > NEXT_PUBLIC_SITE_URL > RAILWAY_PUBLIC_DOMAIN (auto) > fallback
+  // SITE_URL must take priority over RAILWAY_PUBLIC_DOMAIN — otherwise Railway's auto-injected
+  // domain overrides the custom domain after migration.
+  const raw = process.env.SITE_URL
     || process.env.NEXT_PUBLIC_SITE_URL
+    || (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : "")
     || "https://nesterchukanatoliy.com";
   const base = normalizeBaseUrl(raw);
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
