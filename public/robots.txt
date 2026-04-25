@@ -6,4 +6,4 @@ Disallow: /checkout/
 Disallow: /cart/
 Disallow: /account/
 
-Sitemap: https://nesterchukanatoliy.com/api/sitemap.xml
+Sitemap: https://nesterchukanatoliy.com/sitemap.xml
