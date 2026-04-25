@@ -101,6 +101,23 @@ function sanitizePayloadForLog(payload: Record<string, unknown>): string {
   }
 }
 
+/** Summarize an object for logging: show keys + string/number values, skip large nested objects */
+function summarizeObj(obj: unknown): Record<string, unknown> | null {
+  if (!obj || typeof obj !== "object") return null;
+  const result: Record<string, unknown> = { _keys: Object.keys(obj as Record<string, unknown>) };
+  for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+    if (val === null || val === undefined) continue;
+    if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+      result[key] = val;
+    } else if (typeof val === "object" && !Array.isArray(val)) {
+      result[key] = `{${Object.keys(val as object).join(",")}}`;
+    } else if (Array.isArray(val)) {
+      result[key] = `[${val.length} items]`;
+    }
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Unified snapshot sync
 // ---------------------------------------------------------------------------
@@ -262,31 +279,54 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     else if (typeof cs === "object" && cs !== null) statusName = String((cs as Record<string, unknown>).name || "");
   }
 
-  // --- Tracking extraction: try multiple paths ---
+  // --- Tracking extraction: try ALL possible paths ---
   const trackingFields: string[] = [];
   let trackingCode: string | null = null;
 
-  const trackingPaths = [
+  const trackingPaths: unknown[] = [
+    // Top-level fields
     keycrmOrder.tracking_code,
     keycrmOrder.ttn,
     keycrmOrder.trackingNumber,
     keycrmOrder.tracking_number,
+    keycrmOrder.delivery_tracking_code,
+    keycrmOrder.shipping_tracking_code,
   ];
 
-  // Try nested shipping/delivery objects
+  // Nested shipping object
   const shipping = keycrmOrder.shipping as Record<string, unknown> | undefined;
   if (shipping && typeof shipping === "object") {
-    trackingPaths.push(shipping.tracking_code, shipping.ttn, shipping.tracking_number);
-  }
-  const delivery = keycrmOrder.delivery as Record<string, unknown> | undefined;
-  if (delivery && typeof delivery === "object") {
-    trackingPaths.push(delivery.tracking_code, delivery.ttn, delivery.tracking_number);
+    trackingPaths.push(
+      shipping.tracking_code, shipping.ttn, shipping.tracking_number,
+      shipping.trackingNumber, shipping.delivery_tracking_code,
+    );
   }
 
-  // Try deliveries array
+  // Nested delivery object
+  const delivery = keycrmOrder.delivery as Record<string, unknown> | undefined;
+  if (delivery && typeof delivery === "object") {
+    trackingPaths.push(
+      delivery.tracking_code, delivery.ttn, delivery.tracking_number,
+      delivery.trackingNumber,
+    );
+  }
+
+  // deliveries array
   const deliveries = keycrmOrder.deliveries as Array<Record<string, unknown>> | undefined;
   if (Array.isArray(deliveries) && deliveries.length > 0) {
-    trackingPaths.push(deliveries[0].tracking_code, deliveries[0].ttn, deliveries[0].tracking_number);
+    const d0 = deliveries[0];
+    trackingPaths.push(
+      d0.tracking_code, d0.ttn, d0.tracking_number, d0.trackingNumber,
+    );
+  }
+
+  // shipments array
+  const shipments = keycrmOrder.shipments as Array<Record<string, unknown>> | undefined;
+  if (Array.isArray(shipments) && shipments.length > 0) {
+    const s0 = shipments[0];
+    trackingPaths.push(
+      s0.tracking_code, s0.ttn, s0.tracking_number, s0.trackingNumber,
+    );
   }
 
   for (const val of trackingPaths) {
@@ -296,8 +336,12 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
     }
   }
 
-  // Log which tracking-related fields exist
-  for (const key of ["tracking_code", "ttn", "trackingNumber", "tracking_number", "shipping", "delivery", "deliveries"]) {
+  // Log which tracking-related fields exist at top level
+  for (const key of [
+    "tracking_code", "ttn", "trackingNumber", "tracking_number",
+    "delivery_tracking_code", "shipping_tracking_code",
+    "shipping", "delivery", "deliveries", "shipments",
+  ]) {
     if (keycrmOrder[key] !== undefined) trackingFields.push(key);
   }
 
@@ -317,9 +361,8 @@ function extractOrderFields(keycrmOrder: Record<string, unknown>): ExtractedFiel
   }
   if (Array.isArray(deliveries) && deliveries.length > 0) {
     deliveryStatusPaths.push(deliveries[0].status, deliveries[0].delivery_status);
-    // Also try shipments
   }
-  const shipments = keycrmOrder.shipments as Array<Record<string, unknown>> | undefined;
+  // shipments already defined above in tracking extraction
   if (Array.isArray(shipments) && shipments.length > 0) {
     deliveryStatusPaths.push(shipments[0].status, shipments[0].delivery_status);
   }
@@ -476,7 +519,9 @@ function syncDeliveryAndTracking(
   // --- 3. Tracking number ---
   const { trackingCode } = extracted;
   let trackingChanged = false;
+
   if (trackingCode && trackingCode !== order.trackingNumber) {
+    // TTN added or changed
     updateData.trackingNumber = trackingCode;
     trackingChanged = true;
 
@@ -484,6 +529,10 @@ function syncDeliveryAndTracking(
     if (!newDelivery && (oldDelivery === "pending" || !order.deliveryStatus)) {
       newDelivery = "shipped";
     }
+  } else if (!trackingCode && order.trackingNumber) {
+    // TTN was removed in KeyCRM
+    updateData.trackingNumber = null;
+    trackingChanged = true;
   }
 
   // --- 4. Apply delivery status ---
@@ -504,14 +553,35 @@ function syncDeliveryAndTracking(
       newStatus: newDelivery,
       message,
     });
-  } else if (trackingChanged && trackingCode) {
-    // Only tracking changed, no delivery status change
-    historyEntries.push({
-      source: "delivery",
-      oldStatus: oldDelivery,
-      newStatus: oldDelivery,
-      message: `ТТН: ${trackingCode}`,
-    });
+  }
+
+  // --- 5. Tracking-only history (when delivery status didn't change) ---
+  if (trackingChanged && !newDelivery) {
+    if (trackingCode && !order.trackingNumber) {
+      // TTN added
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: oldDelivery,
+        newStatus: oldDelivery,
+        message: `ТТН додано: ${trackingCode}`,
+      });
+    } else if (trackingCode && order.trackingNumber && trackingCode !== order.trackingNumber) {
+      // TTN changed
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: oldDelivery,
+        newStatus: oldDelivery,
+        message: `ТТН оновлено: ${trackingCode}`,
+      });
+    } else if (!trackingCode && order.trackingNumber) {
+      // TTN removed
+      historyEntries.push({
+        source: "delivery",
+        oldStatus: oldDelivery,
+        newStatus: oldDelivery,
+        message: "ТТН видалено",
+      });
+    }
   }
 }
 
@@ -601,7 +671,7 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
   }
 
   try {
-    const url = `${baseUrl}/order/${keycrmOrderId}?include=payments,status`;
+    const url = `${baseUrl}/order/${keycrmOrderId}?include=payments,status,shipping,delivery`;
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
     });
@@ -613,18 +683,25 @@ async function fetchKeycrmOrder(keycrmOrderId: string): Promise<Record<string, u
 
     const data = await res.json();
 
-    // Debug: log top-level keys and status shape for diagnostics
-    logger.info("Webhook: KeyCRM API response shape", {
+    // Debug: log delivery/shipping structure to discover where TTN lives
+    const shippingSnap = data.shipping ? summarizeObj(data.shipping) : null;
+    const deliverySnap = data.delivery ? summarizeObj(data.delivery) : null;
+    const deliveriesSnap = Array.isArray(data.deliveries) && data.deliveries[0] ? summarizeObj(data.deliveries[0]) : null;
+    const shipmentsSnap = Array.isArray(data.shipments) && data.shipments[0] ? summarizeObj(data.shipments[0]) : null;
+
+    logger.info("Webhook: KeyCRM API response", {
       keycrmOrderId,
       topKeys: Object.keys(data),
       statusType: typeof data.status,
       statusValue: typeof data.status === "object" ? JSON.stringify(data.status).substring(0, 200) : String(data.status || ""),
-      hasTrackingCode: !!data.tracking_code,
-      hasTtn: !!data.ttn,
-      hasShipping: !!data.shipping,
-      hasDelivery: !!data.delivery,
-      hasDeliveries: !!data.deliveries,
-      hasShipments: !!data.shipments,
+      tracking_code: data.tracking_code || null,
+      ttn: data.ttn || null,
+      shipping: shippingSnap,
+      delivery: deliverySnap,
+      deliveries0: deliveriesSnap,
+      shipments0: shipmentsSnap,
+      delivery_tracking_code: data.delivery_tracking_code || null,
+      shipping_tracking_code: data.shipping_tracking_code || null,
       deliveryStatus: data.delivery_status || data.shipping_status || null,
       paymentStatus: data.payment_status,
       paymentsCount: Array.isArray(data.payments) ? data.payments.length : 0,
