@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/shared/db";
 import { createLogger } from "@/shared/logger";
-import { mapKeycrmToPublicStatus } from "@/shared/keycrm-status-map";
+import { mapKeycrmToPublicStatusAsync } from "@/shared/keycrm-status-map";
 import { IntegrationLogRepository } from "@/repositories/IntegrationLogRepository";
 
 const logger = createLogger("KeyCRM:Webhook");
@@ -127,7 +127,7 @@ async function syncOrderSnapshot(keycrmOrderId: string, eventName: string, conte
   const updateData: Record<string, unknown> = {};
   const historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }> = [];
 
-  syncOrderStatus(extracted, order, updateData, historyEntries);
+  await syncOrderStatus(extracted, order, updateData, historyEntries);
   syncDeliveryAndTracking(extracted, order, updateData, historyEntries);
   syncPaymentStatus(dataSource, order, updateData, historyEntries);
 
@@ -290,7 +290,7 @@ function extractOrderFields(data: Record<string, unknown>): ExtractedFields {
 // Sync: Order status
 // ---------------------------------------------------------------------------
 
-function syncOrderStatus(
+async function syncOrderStatus(
   extracted: ExtractedFields,
   order: { id: string; status: string; keycrmStatusName: string | null },
   updateData: Record<string, unknown>,
@@ -302,7 +302,7 @@ function syncOrderStatus(
     return;
   }
 
-  const newPublicStatus = mapKeycrmToPublicStatus(statusId, statusName, statusGroupId);
+  const newPublicStatus = await mapKeycrmToPublicStatusAsync(statusId, statusName);
   const oldPublicStatus = order.status;
 
   logger.info("syncOrderStatus: mapping", {

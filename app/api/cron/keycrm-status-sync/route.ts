@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/shared/db";
 import { createLogger } from "@/shared/logger";
-import { mapKeycrmToPublicStatus } from "@/shared/keycrm-status-map";
+import { mapKeycrmToPublicStatusAsync } from "@/shared/keycrm-status-map";
 import { IntegrationLogRepository } from "@/repositories/IntegrationLogRepository";
 
 const logger = createLogger("KeyCRMStatusSync");
@@ -58,8 +58,7 @@ export async function POST(request: NextRequest) {
         const keycrmStatusName = keycrmOrder.status?.name || keycrmOrder.status_name || "";
         const keycrmStatusId = keycrmOrder.status_id || keycrmOrder.status?.id;
         const trackingNumber = keycrmOrder.tracking_code || keycrmOrder.ttn || null;
-        const keycrmStatusGroupId = keycrmOrder.status_group_id;
-        const newPublicStatus = mapKeycrmToPublicStatus(keycrmStatusId, keycrmStatusName, keycrmStatusGroupId);
+        const newPublicStatus = await mapKeycrmToPublicStatusAsync(keycrmStatusId, keycrmStatusName);
 
         // Only update if status changed or tracking number arrived
         if (newPublicStatus && (newPublicStatus !== order.status || trackingNumber)) {
