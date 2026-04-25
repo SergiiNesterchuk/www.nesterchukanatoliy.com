@@ -45,7 +45,35 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
       return session;
     },
+    // Guard redirects: only allow our domain and relative paths.
+    // Prevents stale redirects to old Railway domain after migration.
+    redirect({ url, baseUrl }) {
+      // Relative paths are always safe
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      // Same origin
+      try {
+        const target = new URL(url);
+        const base = new URL(baseUrl);
+        if (target.hostname === base.hostname) return url;
+        // Block old Railway domain redirects
+        if (target.hostname.includes("railway.app")) return baseUrl;
+      } catch { /* invalid URL */ }
+      return baseUrl;
+    },
   },
   debug: process.env.NODE_ENV === "development",
   trustHost: true,
+  // Use database sessions (default with adapter), not JWT.
+  // PKCE cookies use __Host- prefix with Secure flag.
+  cookies: {
+    pkceCodeVerifier: {
+      name: "authjs.pkce.code_verifier",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
+  },
 });

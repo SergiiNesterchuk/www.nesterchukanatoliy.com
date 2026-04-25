@@ -11,14 +11,21 @@ export default function LoginPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Show auth error from query if redirected from error page
+  // Show auth error from query if redirected from error page.
+  // All errors get friendly Ukrainian messages — never show raw error codes.
   const [authError] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const err = params.get("error");
-      if (err === "Verification") return "Посилання для входу застаріло. Спробуйте ще раз.";
-      if (err === "OAuthCallback") return "Помилка входу через Google. Спробуйте ще раз.";
-      if (err) return `Помилка входу: ${err}`;
+      if (!err) return "";
+      if (err === "Verification") return "Посилання для входу застаріло або вже використане. Спробуйте ще раз.";
+      if (err === "OAuthCallback") return "Не вдалося увійти через Google. Спробуйте ще раз.";
+      if (err === "Configuration") return "Не вдалося увійти через Google. Спробуйте ще раз або оновіть сторінку.";
+      if (err === "OAuthSignin") return "Не вдалося розпочати вхід через Google. Спробуйте ще раз.";
+      if (err === "Callback") return "Не вдалося завершити вхід. Спробуйте ще раз.";
+      if (err === "SessionRequired") return "Для доступу потрібно увійти.";
+      // Any other error — generic friendly message, no raw codes
+      return "Не вдалося увійти. Спробуйте ще раз.";
     }
     return "";
   });
