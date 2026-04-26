@@ -17,9 +17,11 @@ const FALLBACK_MESSAGE = "Замовлення прийнято! Наш мене
 function renderTemplate(template: string, vars: Record<string, string>): string {
   let result = template;
   for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{${key}}`, value);
+    result = result.replaceAll(`{${key}}`, value || "");
   }
-  return result;
+  // Видалити залишкові невідомі змінні типу {unknownVar}
+  result = result.replace(/\{[a-zA-Z]+\}/g, "");
+  return result.trim();
 }
 
 function formatAmount(kopiyky: number): string {
