@@ -5,6 +5,25 @@
 
 ---
 
+## 2026-04-26 — Mobile-responsive адмін-панель
+
+### Що зроблено
+- **Mobile drawer навігація**: hamburger menu → slide-out drawer з усіма пунктами
+- **Active page highlight**: поточна сторінка підсвічується зеленим
+- **Responsive padding**: `p-4 md:p-6` на main content
+- **Таблиці order detail**: додано `overflow-x-auto` + `min-w` для horizontal scroll
+- **Desktop**: без змін, sidebar працює як раніше
+
+### Файли
+- `components/admin/AdminMobileNav.tsx` — новий client component
+- `app/admin/layout.tsx` — додано mobile nav + responsive padding
+- `app/admin/orders/[id]/page.tsx` — overflow-x-auto на таблицях
+
+### Бізнес-логіка: НЕ змінена
+Checkout, WayForPay, KeyCRM, платежі, статуси, middleware, API — без змін.
+
+---
+
 ## 2026-04-26 — Велика сесія: KeyCRM sync, payment methods, SEO, domain migration
 
 ### KeyCRM Webhook Status Sync

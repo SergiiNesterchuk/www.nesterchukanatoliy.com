@@ -14,6 +14,7 @@ import {
   Star,
   LogOut,
 } from "lucide-react";
+import { AdminMobileNav } from "@/components/admin/AdminMobileNav";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
@@ -37,12 +38,12 @@ export default function AdminLayout({
 }) {
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r hidden md:flex flex-col">
+      {/* Desktop Sidebar */}
+      <aside className="w-64 bg-white border-r hidden md:flex flex-col flex-shrink-0">
         <div className="p-4 border-b">
           <h1 className="font-bold text-gray-900">Адмін-панель</h1>
         </div>
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => (
             <Link
               key={item.href}
@@ -72,10 +73,16 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Content */}
-      <main className="flex-1 overflow-auto">
-        <div className="p-6 max-w-6xl">{children}</div>
-      </main>
+      {/* Content area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile navigation */}
+        <AdminMobileNav />
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
+          <div className="p-4 md:p-6 max-w-6xl">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

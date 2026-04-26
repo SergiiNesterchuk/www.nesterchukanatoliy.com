@@ -154,9 +154,9 @@ export default function AdminOrderDetailPage() {
       </div>
 
       {/* Items */}
-      <div className="bg-white rounded-xl border overflow-hidden">
+      <div className="bg-white rounded-xl border overflow-hidden overflow-x-auto">
         <h2 className="font-semibold p-4 border-b">Товари</h2>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[500px]">
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-4 py-2 text-gray-500">Назва</th>
@@ -185,9 +185,9 @@ export default function AdminOrderDetailPage() {
 
       {/* Payment Events */}
       {order.payments.length > 0 && (
-        <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="bg-white rounded-xl border overflow-hidden overflow-x-auto">
           <h2 className="font-semibold p-4 border-b">Payment Events</h2>
-          <table className="w-full text-sm">
+          <table className="w-full text-sm min-w-[500px]">
             <thead className="bg-gray-50">
               <tr>
                 <th className="text-left px-4 py-2 text-gray-500">Час</th>
@@ -214,7 +214,7 @@ export default function AdminOrderDetailPage() {
 
       {/* Integration Logs */}
       {order.integrationLogs.length > 0 && (
-        <div className="bg-white rounded-xl border overflow-hidden">
+        <div className="bg-white rounded-xl border overflow-hidden overflow-x-auto">
           <h2 className="font-semibold p-4 border-b">Integration Logs</h2>
           <table className="w-full text-sm">
             <thead className="bg-gray-50">
