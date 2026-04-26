@@ -78,10 +78,14 @@ export default async function CheckoutSuccessPage({
         const template = pmRecord?.customerInstruction || FALLBACK_MESSAGE;
         const total = orderData.total;
         const prepayment = orderData.prepaymentAmount || 0;
+        // Для COD передплати: навіть якщо callback ще не оновив paymentStatus,
+        // показуємо prepaymentAmount як оплачену суму (клієнт вже заплатив)
+        const isCodPrepay = orderData.paymentPurpose === "cod_prepayment";
         const paid = orderData.paymentStatus === "paid" ? total
           : orderData.paymentStatus === "partial_paid" ? prepayment
+          : isCodPrepay ? prepayment  // fallback: передплата була відправлена
           : 0;
-        const remaining = total - paid;
+        const remaining = isCodPrepay ? (total - prepayment) : (total - paid);
 
         successMessage = renderTemplate(template, {
           orderNumber: orderData.orderNumber,

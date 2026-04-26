@@ -54,6 +54,14 @@ export async function POST(request: NextRequest) {
       // Create WayForPay session for prepayment amount only
       const payment = await OrderService.createPaymentForOrder(order.id, prepaymentAmount);
 
+      // Синхронізувати з KeyCRM одразу (з unpaid prepayment + remainder)
+      if (process.env.CRM_SYNC_ENABLED !== "false") {
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.createOrder(order.id).catch(() => {});
+        });
+      }
+
       return successResponse({
         orderId: order.id,
         orderNumber: order.orderNumber,
