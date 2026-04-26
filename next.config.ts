@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  trailingSlash: true,
+  // trailingSlash: true ВИДАЛЕНО — ламає WayForPay/KeyCRM POST callbacks
+  // (308 redirect губить POST body). SEO canonical вирішується через
+  // alternates.canonical в metadata кожної сторінки.
   images: {
     formats: ["image/avif", "image/webp"],
     remotePatterns: [
