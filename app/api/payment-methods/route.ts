@@ -10,6 +10,7 @@ export async function GET() {
         key: true,
         title: true,
         description: true,
+        checkoutButtonLabel: true,
         requiresOnlinePayment: true,
       },
     });
@@ -18,7 +19,7 @@ export async function GET() {
     // Fallback if table doesn't exist yet
     return NextResponse.json({
       success: true,
-      data: [{ key: "card_online", title: "Оплата карткою онлайн", description: null, requiresOnlinePayment: true }],
+      data: [{ key: "card_online", title: "Оплата карткою онлайн", description: null, checkoutButtonLabel: null, requiresOnlinePayment: true }],
     });
   }
 }

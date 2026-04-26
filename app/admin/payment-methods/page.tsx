@@ -10,6 +10,7 @@ interface PaymentMethod {
   title: string;
   description: string | null;
   customerInstruction: string | null;
+  checkoutButtonLabel: string | null;
   enabled: boolean;
   requiresOnlinePayment: boolean;
   sortOrder: number;
@@ -43,6 +44,7 @@ export default function AdminPaymentMethodsPage() {
           title: method.title,
           description: method.description,
           customerInstruction: method.customerInstruction,
+          checkoutButtonLabel: method.checkoutButtonLabel,
           enabled: method.enabled,
           requiresOnlinePayment: method.requiresOnlinePayment,
           sortOrder: method.sortOrder,
@@ -88,10 +90,15 @@ export default function AdminPaymentMethodsPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Повідомлення на сторінці успішного замовлення</label>
+              <Input id={`btn-${m.id}`} label="Текст кнопки в checkout" value={m.checkoutButtonLabel || ""} onChange={(e) => update(m.id, "checkoutButtonLabel", e.target.value)} />
+              <p className="mt-1 text-xs text-gray-400">Цей текст бачить покупець на кнопці підтвердження. Без змінних.</p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Повідомлення на сторін��і успішного замовлення</label>
               <textarea value={m.customerInstruction || ""} onChange={(e) => update(m.id, "customerInstruction", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
               <p className="mt-1 text-xs text-gray-400">
-                Доступні змінні: {"{orderNumber}"} {"{totalAmount}"} {"{paidAmount}"} {"{prepaymentAmount}"} {"{remainingAmount}"} {"{paymentMethodTitle}"}
+                Змінні: {"{orderNumber}"} — номер, {"{totalAmount}"} — сума, {"{paidAmount}"} — оплачено, {"{prepaymentAmount}"} — передплата, {"{remainingAmount}"} �� залишок, {"{paymentMethodTitle}"} — спосіб
               </p>
             </div>
 

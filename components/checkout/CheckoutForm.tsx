@@ -43,6 +43,7 @@ interface PaymentMethodOption {
   key: string;
   title: string;
   description: string | null;
+  checkoutButtonLabel: string | null;
   requiresOnlinePayment: boolean;
 }
 
@@ -87,12 +88,12 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
           setSelectedPaymentMethod(d.data[0].key);
         } else {
           // Fallback
-          setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, requiresOnlinePayment: true }]);
+          setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, checkoutButtonLabel: null, requiresOnlinePayment: true }]);
           setSelectedPaymentMethod("card_online");
         }
       })
       .catch(() => {
-        setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, requiresOnlinePayment: true }]);
+        setPaymentMethods([{ key: "card_online", title: "Оплата карткою онлайн", description: null, checkoutButtonLabel: null, requiresOnlinePayment: true }]);
         setSelectedPaymentMethod("card_online");
       });
   }, []);
@@ -487,11 +488,12 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       )}
 
       <Button type="submit" size="lg" loading={submitting} disabled={submitting} className="w-full">
-        {submitting ? "Оформлення..." :
-          selectedPaymentMethod.includes("cod")
-            ? `Оплатити передплату ${formatPrice(Math.min(COD_PREPAYMENT_AMOUNT, totalPrice()))}`
-            : `Оплатити ${formatPrice(totalPrice())}`
-        }
+        {submitting ? "Оформлення..." : (() => {
+          const pm = paymentMethods.find((m) => m.key === selectedPaymentMethod);
+          if (pm?.checkoutButtonLabel) return pm.checkoutButtonLabel;
+          if (pm?.requiresOnlinePayment === false) return "Підтвердити замовлення";
+          return "Підтвердити та оплатити";
+        })()}
       </Button>
     </form>
   );

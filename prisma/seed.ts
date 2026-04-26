@@ -366,6 +366,7 @@ async function main() {
       title: "Оплата карткою онлайн",
       description: "Visa / Mastercard через захищений платіжний сервіс",
       customerInstruction: "Дякуємо! Ваше замовлення оформлено та повністю оплачено ({paidAmount} грн). Відправимо протягом 1–3 днів.",
+      checkoutButtonLabel: "Підтвердити та оплатити",
       enabled: true,
       requiresOnlinePayment: true,
       sortOrder: 1,
@@ -375,6 +376,7 @@ async function main() {
       title: "Накладений платіж з передплатою 200 грн",
       description: "Передплата 200 грн онлайн, решта — при отриманні у Новій Пошті",
       customerInstruction: "Замовлення отримано! Передплату {prepaymentAmount} грн підтверджено ✅ Залишок {remainingAmount} грн ви сплатите при отриманні. Замовлення буде відправлено протягом 1–3 днів.",
+      checkoutButtonLabel: "Підтвердити та оплатити 200 грн передплати",
       enabled: false,
       requiresOnlinePayment: true,
       sortOrder: 2,
@@ -384,6 +386,7 @@ async function main() {
       title: "Оплата на рахунок",
       description: "Після оформлення менеджер надішле реквізити для оплати",
       customerInstruction: "Замовлення №{orderNumber} оформлено. Реквізити для оплати надішлемо найближчим часом у Viber.",
+      checkoutButtonLabel: "Підтвердити замовлення",
       enabled: true,
       requiresOnlinePayment: false,
       sortOrder: 3,
@@ -393,7 +396,7 @@ async function main() {
   for (const pm of paymentMethods) {
     await prisma.paymentMethod.upsert({
       where: { key: pm.key },
-      update: { customerInstruction: pm.customerInstruction }, // Оновити шаблон success message
+      update: { customerInstruction: pm.customerInstruction, checkoutButtonLabel: pm.checkoutButtonLabel },
       create: pm,
     });
   }

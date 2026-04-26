@@ -320,7 +320,8 @@ model PaymentMethod {
   key                   String   @unique // card_wayforpay, cod_cash_on_delivery
   title                 String   // "Оплата карткою онлайн"
   description           String?  // Short description for checkout
-  customerInstruction   String?  @db.Text // Instruction shown after order
+  customerInstruction   String?  @db.Text // Template shown on success page
+  checkoutButtonLabel   String?  // Button text in checkout, e.g. "Підтвердити та оплатити"
   enabled               Boolean  @default(true)
   requiresOnlinePayment Boolean  @default(true)
   sortOrder             Int      @default(0)
