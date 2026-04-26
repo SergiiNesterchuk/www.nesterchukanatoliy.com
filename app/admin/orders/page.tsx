@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/Input";
+import { adminFetch } from "@/shared/admin-fetch";
 import { formatPrice } from "@/shared/money";
 import { ORDER_STATUSES, PAYMENT_STATUSES, CRM_SYNC_STATUSES } from "@/shared/constants";
 
@@ -27,7 +28,7 @@ export default function AdminOrdersPage() {
   const load = (q = "") => {
     setLoading(true);
     const params = q ? `?search=${encodeURIComponent(q)}` : "";
-    fetch(`/api/admin/orders${params}`)
+    adminFetch(`/api/admin/orders${params}`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setOrders(d.data); })
       .finally(() => setLoading(false));

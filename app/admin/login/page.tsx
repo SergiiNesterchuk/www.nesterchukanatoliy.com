@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/Input";
 
 export default function AdminLoginPage() {
   const router = useRouter();
+  const [isExpired] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("expired") === "1";
+    }
+    return false;
+  });
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -45,6 +52,11 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-bold text-center mb-6">Адмін-панель</h1>
         <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
+          {isExpired && !error && (
+            <div className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+              Сесія закінчилась. Будь ласка, увійдіть знову.
+            </div>
+          )}
           {error && (
             <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{error}</div>
           )}

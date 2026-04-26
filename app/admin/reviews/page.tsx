@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { adminFetch } from "@/shared/admin-fetch";
 import { Star, Check, X, Trash2, Pencil, Plus } from "lucide-react";
 
 interface Review {
@@ -33,7 +34,7 @@ export default function AdminReviewsPage() {
 
   const load = (status: string) => {
     setLoading(true);
-    fetch(`/api/admin/reviews?status=${status}`)
+    adminFetch(`/api/admin/reviews?status=${status}`)
       .then((r) => r.json())
       .then((d) => { if (d.success) setReviews(d.data); })
       .finally(() => setLoading(false));
@@ -42,7 +43,7 @@ export default function AdminReviewsPage() {
   useEffect(() => { load(filter); }, [filter]);
 
   const updateStatus = async (id: string, status: string) => {
-    await fetch(`/api/admin/reviews/${id}`, {
+    await adminFetch(`/api/admin/reviews/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
@@ -52,7 +53,7 @@ export default function AdminReviewsPage() {
 
   const deleteReview = async (id: string) => {
     if (!confirm("Видалити відгук?")) return;
-    await fetch(`/api/admin/reviews/${id}`, { method: "DELETE" });
+    await adminFetch(`/api/admin/reviews/${id}`, { method: "DELETE" });
     load(filter);
   };
 
@@ -70,7 +71,7 @@ export default function AdminReviewsPage() {
   const saveEdit = async () => {
     if (!editingId) return;
     setSaving(true);
-    await fetch(`/api/admin/reviews/${editingId}`, {
+    await adminFetch(`/api/admin/reviews/${editingId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -88,7 +89,7 @@ export default function AdminReviewsPage() {
   const createReview = async () => {
     if (!createProductId || !createForm.text) return;
     setSaving(true);
-    await fetch("/api/admin/reviews", {
+    await adminFetch("/api/admin/reviews", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

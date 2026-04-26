@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { adminFetch } from "@/shared/admin-fetch";
 
 interface PaymentMethod {
   id: string;
@@ -23,7 +24,7 @@ export default function AdminPaymentMethodsPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    fetch("/api/admin/payment-methods")
+    adminFetch("/api/admin/payment-methods")
       .then((r) => r.json())
       .then((d) => { if (d.success) setMethods(d.data); })
       .finally(() => setLoading(false));
@@ -37,7 +38,7 @@ export default function AdminPaymentMethodsPage() {
     setSaving(method.id);
     setMessage("");
     try {
-      const res = await fetch(`/api/admin/payment-methods/${method.id}`, {
+      const res = await adminFetch(`/api/admin/payment-methods/${method.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
