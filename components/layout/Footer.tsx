@@ -108,10 +108,19 @@ export async function Footer() {
             <div>
               <h3 className="text-white font-semibold mb-3">Контакти</h3>
               <div className="space-y-2 text-sm">
-                {fc.phone && <a href={`tel:${fc.phone}`} className="flex items-center gap-2 hover:text-white transition-colors">
-                  <Phone className="h-4 w-4 flex-shrink-0" />
-                  {fc.phoneDisplay}
-                </a>}
+                {fc.phone && (() => {
+                  // Нормалізувати телефон для tel: — тільки цифри і +
+                  const cleanPhone = fc.phone.replace(/[^\d+]/g, "");
+                  const telHref = cleanPhone.startsWith("+") ? cleanPhone
+                    : cleanPhone.startsWith("0") ? `+38${cleanPhone}`
+                    : `+${cleanPhone}`;
+                  return (
+                    <a href={`tel:${telHref}`} className="flex items-center gap-2 hover:text-white transition-colors">
+                      <Phone className="h-4 w-4 flex-shrink-0" />
+                      {fc.phoneDisplay}
+                    </a>
+                  );
+                })()}
                 {fc.email && <a href={`mailto:${fc.email}`} className="flex items-center gap-2 hover:text-white transition-colors">
                   <Mail className="h-4 w-4 flex-shrink-0" />
                   {fc.email}

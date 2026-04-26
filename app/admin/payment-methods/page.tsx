@@ -96,7 +96,7 @@ export default function AdminPaymentMethodsPage() {
             </div>
 
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Повідомлення на сторін��і успішного замовлення</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Повідомлення на сторінці успішного замовлення</label>
               <textarea value={m.customerInstruction || ""} onChange={(e) => update(m.id, "customerInstruction", e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
               <p className="mt-1 text-xs text-gray-400">
                 Змінні: {"{orderNumber}"} — номер, {"{totalAmount}"} — сума, {"{paidAmount}"} — оплачено, {"{prepaymentAmount}"} — передплата, {"{remainingAmount}"} �� залишок, {"{paymentMethodTitle}"} — спосіб
