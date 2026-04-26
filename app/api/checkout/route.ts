@@ -58,7 +58,18 @@ export async function POST(request: NextRequest) {
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
-          service.createOrder(order.id).catch(() => {});
+          service.createOrder(order.id).catch(async (e) => {
+            const { createLogger } = await import("@/shared/logger");
+            createLogger("Checkout").error("COD CRM sync failed at checkout", {
+              orderId: order.id, orderNumber: order.orderNumber,
+              error: e instanceof Error ? e.message : String(e),
+            });
+            // Позначити для retry — не ковтати мовчки
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { keycrmSyncStatus: "failed", keycrmSyncError: `Checkout sync: ${String(e).substring(0, 400)}` },
+            }).catch(() => {});
+          });
         });
       }
 
@@ -89,7 +100,12 @@ export async function POST(request: NextRequest) {
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
-          service.createOrder(order.id).catch(() => {});
+          service.createOrder(order.id).catch(async (e) => {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { keycrmSyncStatus: "failed", keycrmSyncError: `Checkout sync: ${String(e).substring(0, 400)}` },
+            }).catch(() => {});
+          });
         });
       }
 
@@ -109,11 +125,15 @@ export async function POST(request: NextRequest) {
       const payment = await OrderService.createPaymentForOrder(order.id);
 
       // Синхронізувати замовлення в KeyCRM одразу (з unpaid payment)
-      // щоб менеджер бачив замовлення навіть до оплати
       if (process.env.CRM_SYNC_ENABLED !== "false") {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
-          service.createOrder(order.id).catch(() => {});
+          service.createOrder(order.id).catch(async (e) => {
+            await prisma.order.update({
+              where: { id: order.id },
+              data: { keycrmSyncStatus: "failed", keycrmSyncError: `Checkout sync: ${String(e).substring(0, 400)}` },
+            }).catch(() => {});
+          });
         });
       }
 

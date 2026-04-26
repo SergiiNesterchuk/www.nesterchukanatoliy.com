@@ -373,6 +373,115 @@ export class KeyCRMService {
     }
   }
 
+  /**
+   * Спеціальна синхронізація COD prepayment: гарантує що KeyCRM має
+   * payment ID 12 (prepayment paid) + payment ID 17 (remainder not_paid).
+   */
+  async syncCodPrepaymentToKeyCRM(orderId: string): Promise<void> {
+    const order = await OrderRepository.findById(orderId);
+    if (!order || !order.keycrmOrderId) {
+      // Якщо order ще не в KeyCRM — створити через загальний flow
+      return this.syncPaymentToKeyCRM(orderId);
+    }
+
+    const orderNum = order.publicOrderNumber || order.orderNumber;
+    const prepaymentUAH = (order.prepaymentAmount || 0) / 100;
+    const remainderUAH = (order.total - (order.prepaymentAmount || 0)) / 100;
+    const prepaymentMethodId = KeyCRMMapper.getPaymentMethodId(order.paymentMethod, "cod_prepayment");
+    const codMethodId = parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "17", 10);
+
+    logger.info("syncCodPrepayment: початок", {
+      orderId, orderNumber: orderNum, prepaymentUAH, remainderUAH,
+      prepaymentMethodId, codMethodId,
+      paymentStatus: order.paymentStatus, keycrmOrderId: order.keycrmOrderId,
+    });
+
+    try {
+      // Отримати поточні payments з KeyCRM
+      const keycrmOrder = await this.client.request<{ payments?: Array<{ id: number; status: string; amount: number; payment_method_id?: number }> }>(
+        "GET", `/order/${order.keycrmOrderId}?include=payments`, undefined, "order", orderId
+      );
+
+      const payments = keycrmOrder.payments || [];
+      const existingPrepayment = payments.find((p) => p.payment_method_id === prepaymentMethodId);
+      const existingRemainder = payments.find((p) => p.payment_method_id === codMethodId);
+
+      // 1. Prepayment payment (ID 12)
+      const prepaymentPaid = order.paymentStatus === "partial_paid" || order.paymentStatus === "paid";
+
+      if (existingPrepayment) {
+        // Оновити статус якщо потрібно
+        if (prepaymentPaid && existingPrepayment.status !== "paid") {
+          await this.client.request("PUT",
+            `/order/${order.keycrmOrderId}/payment/${existingPrepayment.id}`,
+            {
+              payment_method_id: prepaymentMethodId,
+              status: "paid",
+              description: order.externalPaymentId
+                ? `WayForPay передплата ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+                : `WayForPay передплата ${prepaymentUAH} грн. Замовлення сайту: ${orderNum}`,
+            },
+            "order", orderId
+          );
+          logger.info("syncCodPrepayment: prepayment updated → paid", { orderId, paymentId: existingPrepayment.id });
+        }
+        // Зберегти keycrmPaymentId
+        if (!order.keycrmPaymentId) {
+          const { prisma } = await import("@/shared/db");
+          await prisma.order.update({ where: { id: orderId }, data: { keycrmPaymentId: String(existingPrepayment.id) } });
+        }
+      } else {
+        // Створити prepayment payment
+        const result = await this.client.request<{ id?: number }>("POST",
+          `/order/${order.keycrmOrderId}/payment`,
+          {
+            payment_method_id: prepaymentMethodId,
+            amount: prepaymentUAH,
+            status: prepaymentPaid ? "paid" : "not_paid",
+            description: order.externalPaymentId
+              ? `WayForPay передплата ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+              : `WayForPay передплата. Замовлення сайту: ${orderNum}`,
+          },
+          "order", orderId
+        );
+        if (result?.id) {
+          const { prisma } = await import("@/shared/db");
+          await prisma.order.update({ where: { id: orderId }, data: { keycrmPaymentId: String(result.id) } });
+        }
+        logger.info("syncCodPrepayment: prepayment created", { orderId, paymentId: result?.id, status: prepaymentPaid ? "paid" : "not_paid" });
+      }
+
+      // 2. Remainder payment (ID 17) — тільки якщо залишок > 0
+      if (remainderUAH > 0 && !existingRemainder) {
+        await this.client.request("POST",
+          `/order/${order.keycrmOrderId}/payment`,
+          {
+            payment_method_id: codMethodId,
+            amount: remainderUAH,
+            status: "not_paid",
+            description: `Накладений платіж з Нової Пошти ${remainderUAH} грн. Замовлення сайту: ${orderNum}`,
+          },
+          "order", orderId
+        );
+        logger.info("syncCodPrepayment: remainder created", { orderId, amount: remainderUAH });
+      }
+
+      // Верифікація
+      this.verifyPaymentInKeyCRM(order.keycrmOrderId, orderId, orderNum);
+
+      await OrderRepository.updateKeycrmSync(orderId, { keycrmSyncStatus: "synced", keycrmSyncError: null });
+      logger.info("syncCodPrepayment: завершено", { orderId, orderNumber: orderNum });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      logger.error("syncCodPrepayment: помилка", { orderId, error: msg });
+      await OrderRepository.updateKeycrmSync(orderId, {
+        keycrmSyncStatus: "failed",
+        keycrmSyncError: `COD prepayment sync: ${msg.substring(0, 400)}`,
+        keycrmSyncRetries: { increment: 1 },
+      });
+    }
+  }
+
   /** @deprecated Використовуйте syncPaymentToKeyCRM замість attachPayment */
   async attachPayment(orderId: string): Promise<void> {
     return this.syncPaymentToKeyCRM(orderId);
@@ -506,6 +615,12 @@ export class KeyCRMService {
       const isRefundable = ["failed", "refunded", "cancelled", "prepayment_failed"].includes(order.paymentStatus);
       if (isRefundable && order.keycrmOrderId) {
         await this.syncPaymentReversal(orderId);
+        return { success: true };
+      }
+
+      // COD prepayment → спеціальна функція
+      if (order.paymentPurpose === "cod_prepayment" && ["partial_paid", "awaiting_prepayment"].includes(order.paymentStatus)) {
+        await this.syncCodPrepaymentToKeyCRM(orderId);
         return { success: true };
       }
 

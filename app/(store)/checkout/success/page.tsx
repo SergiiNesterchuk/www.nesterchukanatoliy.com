@@ -102,14 +102,17 @@ export default async function CheckoutSuccessPage({
   // Визначити іконку і заголовок
   const isCod = pm?.includes("cod") || orderData?.paymentPurpose === "cod_prepayment";
   const isBankTransfer = pm === "bank_transfer" || orderData?.paymentMethod === "bank_transfer";
+  const codPrepaymentConfirmed = isCod && orderData?.paymentStatus === "partial_paid";
 
   const title = isFailed
     ? "Оплата не пройшла"
     : isBankTransfer
       ? "Замовлення прийнято!"
-      : isCod
+      : codPrepaymentConfirmed
         ? "Передплату отримано!"
-        : "Замовлення прийнято!";
+        : isCod
+          ? "Замовлення оформлено!"
+          : "Замовлення прийнято!";
 
   const Icon = isFailed ? XCircle : isBankTransfer ? CreditCard : isCod ? Package : CheckCircle;
   const iconColor = isFailed ? "text-red-500" : "text-green-600";

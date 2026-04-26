@@ -249,11 +249,13 @@ export class OrderService {
       } catch { /* non-critical */ }
 
       if (process.env.CRM_SYNC_ENABLED !== "false") {
-        // Централізована синхронізація оплати: обробляє всі сценарії
-        // (нове замовлення, існуюче без оплати, оновлення not_paid → paid)
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
-          service.syncPaymentToKeyCRM(order.id).catch((e) => {
+          // COD prepayment → спеціальна фун��ція з двома payments (prepayment + remainder)
+          const syncFn = isCodPrepayment
+            ? service.syncCodPrepaymentToKeyCRM(order.id)
+            : service.syncPaymentToKeyCRM(order.id);
+          syncFn.catch((e) => {
             logger.error("KeyCRM payment sync failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
           });
         });
