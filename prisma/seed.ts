@@ -379,6 +379,15 @@ async function main() {
       requiresOnlinePayment: true,
       sortOrder: 2,
     },
+    {
+      key: "bank_transfer",
+      title: "Оплата на рахунок",
+      description: "Після оформлення менеджер надішле реквізити для оплати",
+      customerInstruction: "Замовлення прийняте! Менеджер надішле вам реквізити для оплати. Очікуйте повідомлення або дзвінок.",
+      enabled: true,
+      requiresOnlinePayment: false,
+      sortOrder: 3,
+    },
   ];
 
   for (const pm of paymentMethods) {

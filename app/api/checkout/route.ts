@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
     const validated = checkoutSchema.parse(body);
 
     const isCod = validated.paymentMethod.includes("cod");
+    const isBankTransfer = validated.paymentMethod === "bank_transfer";
 
     // For COD: set prepayment fields before order creation
     const order = await OrderService.createOrder({
@@ -68,6 +69,27 @@ export async function POST(request: NextRequest) {
               formFields: (payment as unknown as Record<string, unknown>).formFields,
             }
           : null,
+      });
+    } else if (isBankTransfer) {
+      // Оплата на рахунок — без WayForPay, менеджер надішле реквізити
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { paymentPurpose: "bank_transfer", paymentStatus: "pending" },
+      }).catch(() => {});
+
+      // Синхронізувати з KeyCRM одразу (з not_paid payment)
+      if (process.env.CRM_SYNC_ENABLED !== "false") {
+        import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
+          const service = new KeyCRMService();
+          service.createOrder(order.id).catch(() => {});
+        });
+      }
+
+      return successResponse({
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        paymentMethod: validated.paymentMethod,
+        requiresOnlinePayment: false,
       });
     } else {
       // Full card payment (card_wayforpay)

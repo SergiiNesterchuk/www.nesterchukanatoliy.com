@@ -464,11 +464,13 @@ railway run pg_dump $DATABASE_URL > backup.sql
 | 16 | `cash_on_delivery` | Cash_on_delivery | Так |
 
 **Сайт використовує:**
+- **ID 3** = Оплата на рахунок (bank_transfer) — менеджер надсилає реквізити
 - **ID 8** = 100% онлайн-оплата WayForPay (full_payment)
 - **ID 12** = Передплата 200 грн WayForPay (cod_prepayment)
-- **ID 17** = Накладений платіж з Нової Пошти (решта при отриманні)
+- **ID 17** = Накладений платіж з Нової Пошти (COD решта)
 
 Env variables:
+- `KEYCRM_PAYMENT_METHOD_BANK_TRANSFER_ID=3` (оплата на рахунок)
 - `KEYCRM_PAYMENT_METHOD_CARD_ID=8` (100% оплата)
 - `KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID=12` (передплата 200 грн)
 - `KEYCRM_PAYMENT_METHOD_COD_ID=17` (накладений платіж НП)
@@ -537,6 +539,11 @@ Authorization: Bearer {KEYCRM_API_KEY}
   { "payment_method_id": 12, "amount": 200, "status": "paid", "description": "WayForPay передплата 200 грн. WayForPay: txId456. Замовлення сайту: K-5018" },
   { "payment_method_id": 17, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
 ]
+```
+
+**E. Оплата на рахунок (bank_transfer):**
+```json
+{ "payment_method_id": 3, "amount": 280, "status": "not_paid", "description": "Оплата на рахунок. Реквізити надішле менеджер. Замовлення сайту: K-5020" }
 ```
 
 ### Discovery endpoint

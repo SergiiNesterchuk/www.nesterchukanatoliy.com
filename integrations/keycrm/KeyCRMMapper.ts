@@ -238,13 +238,24 @@ export class KeyCRMMapper {
         });
       }
     } else if (order.paymentMethod.includes("cod")) {
-      // COD без передплати — ID 16
+      // COD без передплати — ID 17
       keycrmOrder.payments = [
         {
           payment_method_id: codMethodId,
           amount: Number(toHryvni(order.total)) || 0,
           status: "not_paid",
           description: `Накладений платіж. Замовлення сайту: ${orderNum}`,
+        },
+      ];
+    } else if (order.paymentMethod === "bank_transfer") {
+      // Оплата на рахунок — ID 3
+      const bankTransferId = this.getPaymentMethodId("bank_transfer");
+      keycrmOrder.payments = [
+        {
+          payment_method_id: bankTransferId,
+          amount: Number(toHryvni(order.total)) || 0,
+          status: "not_paid",
+          description: `Оплата на рахунок. Реквізити надішле менеджер. Замовлення сайту: ${orderNum}`,
         },
       ];
     }
@@ -268,16 +279,21 @@ export class KeyCRMMapper {
   }
 
   // KeyCRM payment method IDs:
+  // ID 3 = "Оплата на рахунок" — bank transfer
   // ID 8 = "100% Онлайн-оплата банківською карткою (WayForPay)" — повна оплата
   // ID 12 = "Післяплата (Передплата 200грн)" — COD передплата WayForPay
+  // ID 17 = "Накладений платіж з Нової Пошти" — COD решта
   static getPaymentMethodId(method: string, purpose?: string | null): number {
+    if (purpose === "bank_transfer" || method === "bank_transfer") {
+      return parseInt(process.env.KEYCRM_PAYMENT_METHOD_BANK_TRANSFER_ID || "3", 10);
+    }
     if (purpose === "cod_prepayment") {
       return parseInt(process.env.KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID || "12", 10);
     }
     if (this.isWayForPayMethod(method)) {
       return parseInt(process.env.KEYCRM_PAYMENT_METHOD_CARD_ID || "8", 10);
     }
-    // Fallback для COD без передплати — використовуємо ID 16 (cash_on_delivery)
+    // Fallback для COD — ID 17 (Накладений платіж з Нової Пошти)
     return parseInt(process.env.KEYCRM_PAYMENT_METHOD_COD_ID || "17", 10);
   }
 
