@@ -365,7 +365,7 @@ async function main() {
       key: "card_wayforpay",
       title: "Оплата карткою онлайн",
       description: "Visa / Mastercard через захищений платіжний сервіс",
-      customerInstruction: "Після оформлення ви будете перенаправлені на сторінку оплати.",
+      customerInstruction: "Дякуємо! Ми отримали вашу оплату у розмірі {paidAmount} грн. Ваше замовлення {orderNumber} буде відправлено протягом 1-3 днів.",
       enabled: true,
       requiresOnlinePayment: true,
       sortOrder: 1,
@@ -374,7 +374,7 @@ async function main() {
       key: "cod_cash_on_delivery",
       title: "Накладений платіж з передплатою 200 грн",
       description: "Передплата 200 грн онлайн, решта — при отриманні у Новій Пошті",
-      customerInstruction: "Оплатіть 200 грн зараз. Решту суми ви сплатите при отриманні на пошті.",
+      customerInstruction: "Дякуємо! Ми отримали передплату {prepaymentAmount} грн по замовленню {orderNumber}. Ваше замовлення буде відправлено протягом 1-3 днів. Залишок до оплати при отриманні: {remainingAmount} грн.",
       enabled: false,
       requiresOnlinePayment: true,
       sortOrder: 2,
@@ -383,7 +383,7 @@ async function main() {
       key: "bank_transfer",
       title: "Оплата на рахунок",
       description: "Після оформлення менеджер надішле реквізити для оплати",
-      customerInstruction: "Замовлення прийняте! Менеджер надішле вам реквізити для оплати. Очікуйте повідомлення або дзвінок.",
+      customerInstruction: "Замовлення {orderNumber} прийнято! Очікуйте, наш менеджер надішле вам реквізити для оплати у Viber або за вказаними контактами. Після отримання оплати ми підготуємо замовлення до відправки.",
       enabled: true,
       requiresOnlinePayment: false,
       sortOrder: 3,
@@ -393,7 +393,7 @@ async function main() {
   for (const pm of paymentMethods) {
     await prisma.paymentMethod.upsert({
       where: { key: pm.key },
-      update: {}, // Don't overwrite admin changes
+      update: { customerInstruction: pm.customerInstruction }, // Оновити шаблон success message
       create: pm,
     });
   }

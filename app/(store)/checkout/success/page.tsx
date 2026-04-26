@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { CheckCircle, Clock, XCircle, Package } from "lucide-react";
+import { CheckCircle, Clock, XCircle, Package, CreditCard } from "lucide-react";
 import { prisma } from "@/shared/db";
 import { OrderCopyButton } from "./OrderCopyButton";
 
@@ -11,20 +11,20 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-async function getPageSettings() {
-  const defaults: Record<string, string> = {
-    checkout_success_title: "Замовлення прийнято!",
-    checkout_success_text: "Дякуємо за замовлення! Ми зв'яжемось з вами найближчим часом для підтвердження.",
-    checkout_failed_title: "Оплата не пройшла",
-    checkout_failed_text: "Оплата не була завершена. Ваше замовлення збережено.",
-    checkout_cod_title: "Передплату отримано!",
-    checkout_cod_text: "Дякуємо! Передплату отримано. Решту суми ви сплатите при отриманні на пошті. Ми зв'яжемось для підтвердження.",
-  };
-  try {
-    const settings = await prisma.settings.findMany({ where: { key: { startsWith: "checkout_" } } });
-    for (const s of settings) { if (s.value) defaults[s.key] = s.value; }
-  } catch { /* */ }
-  return defaults;
+const FALLBACK_MESSAGE = "Замовлення прийнято! Наш менеджер зв'яжеться з вами найближчим часом.";
+
+/** Підставити шаблонні змінні в текст */
+function renderTemplate(template: string, vars: Record<string, string>): string {
+  let result = template;
+  for (const [key, value] of Object.entries(vars)) {
+    result = result.replaceAll(`{${key}}`, value);
+  }
+  return result;
+}
+
+function formatAmount(kopiyky: number): string {
+  const uah = kopiyky / 100;
+  return Number.isInteger(uah) ? `${uah}` : uah.toFixed(2);
 }
 
 export default async function CheckoutSuccessPage({
@@ -32,38 +32,117 @@ export default async function CheckoutSuccessPage({
 }: {
   searchParams: Promise<{ order?: string; status?: string; pm?: string }>;
 }) {
-  const { order, status, pm } = await searchParams;
+  const { order: orderNumber, status, pm } = await searchParams;
   const isFailed = status === "failed" || status === "Declined";
-  const isCod = pm?.includes("cod");
-  const hp = await getPageSettings();
 
-  const title = isFailed ? hp.checkout_failed_title : isCod ? hp.checkout_cod_title : hp.checkout_success_title;
-  const text = isFailed ? hp.checkout_failed_text : isCod ? hp.checkout_cod_text : hp.checkout_success_text;
+  // Підвантажити замовлення з БД для отримання деталей
+  let orderData: {
+    orderNumber: string;
+    total: number;
+    prepaymentAmount: number | null;
+    paymentMethod: string;
+    paymentStatus: string;
+    paymentPurpose: string | null;
+  } | null = null;
+
+  let successMessage = FALLBACK_MESSAGE;
+
+  if (orderNumber && !isFailed) {
+    try {
+      orderData = await prisma.order.findFirst({
+        where: {
+          OR: [
+            { orderNumber },
+            { publicOrderNumber: orderNumber },
+          ],
+        },
+        select: {
+          orderNumber: true,
+          total: true,
+          prepaymentAmount: true,
+          paymentMethod: true,
+          paymentStatus: true,
+          paymentPurpose: true,
+        },
+      });
+
+      if (orderData) {
+        // Знайти paymentMethod і його customerInstruction
+        const pmRecord = await prisma.paymentMethod.findFirst({
+          where: { key: orderData.paymentMethod },
+          select: { customerInstruction: true, title: true },
+        });
+
+        const template = pmRecord?.customerInstruction || FALLBACK_MESSAGE;
+        const total = orderData.total;
+        const prepayment = orderData.prepaymentAmount || 0;
+        const paid = orderData.paymentStatus === "paid" ? total
+          : orderData.paymentStatus === "partial_paid" ? prepayment
+          : 0;
+        const remaining = total - paid;
+
+        successMessage = renderTemplate(template, {
+          orderNumber: orderData.orderNumber,
+          totalAmount: formatAmount(total),
+          paidAmount: formatAmount(paid),
+          prepaymentAmount: formatAmount(prepayment),
+          remainingAmount: formatAmount(remaining),
+          paymentMethodTitle: pmRecord?.title || "",
+        });
+      }
+    } catch { /* fallback */ }
+  }
+
+  // Визначити іконку і заголовок
+  const isCod = pm?.includes("cod") || orderData?.paymentPurpose === "cod_prepayment";
+  const isBankTransfer = pm === "bank_transfer" || orderData?.paymentMethod === "bank_transfer";
+
+  const title = isFailed
+    ? "Оплата не пройшла"
+    : isBankTransfer
+      ? "Замовлення прийнято!"
+      : isCod
+        ? "Передплату отримано!"
+        : "Замовлення прийнято!";
+
+  const Icon = isFailed ? XCircle : isBankTransfer ? CreditCard : isCod ? Package : CheckCircle;
+  const iconColor = isFailed ? "text-red-500" : "text-green-600";
+
+  // Для failed — окремий текст
+  if (isFailed) {
+    successMessage = "Оплата не була завершена. Ваше замовлення збережено — ви можете спробувати оплатити пізніше.";
+  }
 
   return (
     <div className="max-w-xl mx-auto px-4 py-16 text-center">
       <div className="flex justify-center mb-6">
-        {isFailed ? <XCircle className="h-16 w-16 text-red-500" /> : isCod ? <Package className="h-16 w-16 text-green-600" /> : <CheckCircle className="h-16 w-16 text-green-600" />}
+        <Icon className={`h-16 w-16 ${iconColor}`} />
       </div>
 
       <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
 
-      {order && (
+      {orderNumber && (
         <div className="mt-3">
           <p className="text-lg text-gray-600">Номер замовлення:</p>
           <div className="mt-1 flex items-center justify-center gap-2">
-            <span className="text-xl font-bold font-mono text-gray-900">{order}</span>
-            <OrderCopyButton orderNumber={order} />
+            <span className="text-xl font-bold font-mono text-gray-900">{orderNumber}</span>
+            <OrderCopyButton orderNumber={orderNumber} />
           </div>
           <p className="mt-1 text-xs text-gray-400">Збережіть цей номер для перевірки статусу</p>
         </div>
       )}
 
-      <p className="mt-4 text-gray-500">{text}</p>
+      <p className="mt-4 text-gray-500 leading-relaxed">{successMessage}</p>
 
-      {isCod && (
+      {isCod && !isFailed && (
         <div className="mt-4 bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-700">
-          <Clock className="h-5 w-5 inline mr-1" />Оплата при отриманні на пошті
+          <Clock className="h-5 w-5 inline mr-1" />Решту суми ви сплатите при отриманні на пошті
+        </div>
+      )}
+
+      {isBankTransfer && !isFailed && (
+        <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-700">
+          <CreditCard className="h-5 w-5 inline mr-1" />Менеджер надішле реквізити
         </div>
       )}
 
