@@ -12,6 +12,7 @@ import {
   Home,
   CreditCard,
   Star,
+  LogOut,
 } from "lucide-react";
 
 const navItems = [
@@ -53,7 +54,7 @@ export default function AdminLayout({
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t">
+        <div className="p-3 border-t space-y-1">
           <Link
             href="/"
             className="flex items-center gap-2 px-3 py-2 text-sm text-gray-500 hover:text-gray-700"
@@ -61,6 +62,13 @@ export default function AdminLayout({
             <ArrowLeft className="h-4 w-4" />
             На сайт
           </Link>
+          <a
+            href="/api/admin/logout"
+            className="flex items-center gap-2 px-3 py-2 text-sm text-red-500 hover:text-red-700"
+          >
+            <LogOut className="h-4 w-4" />
+            Вийти
+          </a>
         </div>
       </aside>
 
