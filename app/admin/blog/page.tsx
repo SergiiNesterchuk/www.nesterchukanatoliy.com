@@ -132,7 +132,36 @@ export default function AdminBlogPage() {
         <div className="space-y-4">
           <Input id="blog-title" label="Заголовок *" value={form.title} onChange={(e) => handleTitleChange(e.target.value)} />
           <Input id="blog-slug" label="Slug (URL) *" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
-          <Input id="blog-cover" label="URL обкладинки" value={form.coverImageUrl} onChange={(e) => setForm({ ...form, coverImageUrl: e.target.value })} placeholder="https://..." />
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Обкладинка</label>
+            {form.coverImageUrl && (
+              <div className="mb-2 relative inline-block">
+                <img src={form.coverImageUrl} alt="Cover" className="h-32 rounded-lg object-cover" />
+                <button type="button" onClick={() => setForm({ ...form, coverImageUrl: "" })} className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center">×</button>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                type="file"
+                accept="image/*"
+                className="text-sm file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700 file:text-sm hover:file:bg-gray-200"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  try {
+                    const res = await adminFetch("/api/admin/upload", { method: "POST", body: fd });
+                    const d = await res.json();
+                    if (d.success && d.data?.url) setForm((prev) => ({ ...prev, coverImageUrl: d.data.url }));
+                    else setMessage("Помилка завантаження");
+                  } catch { setMessage("Помилка завантаження"); }
+                }}
+              />
+            </div>
+            <p className="mt-1 text-xs text-gray-400">Або вставте URL вручну:</p>
+            <Input id="blog-cover-url" value={form.coverImageUrl} onChange={(e) => setForm({ ...form, coverImageUrl: e.target.value })} placeholder="https://..." />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Короткий опис</label>
             <textarea value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} rows={2} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />

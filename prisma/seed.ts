@@ -274,6 +274,25 @@ async function main() {
     });
   }
 
+  // Сторінка "Блог" — привʼязує /blog/ до навігації сайту
+  await prisma.page.upsert({
+    where: { slug: "blog" },
+    update: {},
+    create: {
+      title: "Блог",
+      slug: "blog",
+      content: "Системна сторінка — відображає список статей блогу.",
+      isActive: true,
+      showInNav: true,
+      showInFooter: true,
+      showInMobileMenu: true,
+      isSystem: true,
+      metaTitle: "Блог — Магазин Анатолія Нестерчука",
+      metaDesc: "Корисні статті про натуральний яблучний оцет, бордоську суміш та догляд за садом.",
+      sortOrder: 50,
+    },
+  });
+
   // System navigation page: "Статус замовлення"
   await prisma.page.upsert({
     where: { slug: "order-status" },
