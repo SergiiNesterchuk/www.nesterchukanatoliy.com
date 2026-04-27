@@ -5,17 +5,21 @@
 
 ---
 
-## 2026-04-27 — Fix ERR_TOO_MANY_REDIRECTS для admin API
+## 2026-04-27 — Fix ERR_TOO_MANY_REDIRECTS + admin reviews
 
 ### Root cause
-adminFetch при 401 робив redirect на login. Якщо admin_token невалідна
-але присутня, middleware пропускав, page рендерилась, adminFetch 401,
-redirect, loop. Також /api/ paths не повинні редіректитись на login.
+1. **trailingSlash:true** (видалено раніше) залишив кешовані **308 Permanent Redirect** в браузерах: `/api/admin/reviews?status=approved` → 308 → `/api/admin/reviews/?status=approved` → loop. 308 кешується браузером назавжди.
+2. **adminFetch** при 401 робив redirect на login → React render loop.
+3. **Default filter "pending"** показував 0 відгуків (бо pending порожній).
 
 ### Fix
-- adminFetch: перевіряє чи вже на login page перед redirect
-- middleware: виключає /api/ з redirect (API повертає JSON 401)
-- Reviews page: error state замість "Відгуків немає" при failed fetch
+- `adminFetch`: спрощено до простого fetch з `cache: "no-store"` (обходить кешовані 308) і `credentials: "same-origin"`. Без redirect логіки.
+- `middleware`: `/api/*` виключено з redirect на login (API повертає JSON 401)
+- Reviews page: default filter `"approved"`, error state при failed fetch
+- API reviews: підтримка `status=all`
+
+### Урок
+**НІКОЛИ не вмикати `trailingSlash: true`** в Next.js App Router якщо є POST API routes. 308 redirects кешуються браузером назавжди і створюють redirect loops навіть після видалення налаштування. Єдине рішення для користувачів — очистити кеш браузера.
 
 ---
 
