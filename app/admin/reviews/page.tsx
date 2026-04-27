@@ -38,12 +38,25 @@ export default function AdminReviewsPage() {
     setLoading(true);
     setLoadError("");
     adminFetch(`/api/admin/reviews?status=${status}`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          console.error(`[Admin Reviews] HTTP ${r.status}:`, text.substring(0, 200));
+          throw new Error(`HTTP ${r.status}`);
+        }
         return r.json();
       })
-      .then((d) => { if (d.success) setReviews(d.data); })
-      .catch(() => setLoadError("Не вдалося завантажити відгуки. Спробуйте оновити сторінку або увійдіть повторно."))
+      .then((d) => {
+        if (d.success) setReviews(d.data);
+        else setLoadError(d.error?.message || "Помилка сервера");
+      })
+      .catch((e) => {
+        if (e?.message?.includes("401")) {
+          // adminFetch вже зробив redirect — не показувати error
+          return;
+        }
+        setLoadError("Не вдалося завантажити відгуки. Спробуйте оновити сторінку або увійдіть повторно.");
+      })
       .finally(() => setLoading(false));
   };
 
