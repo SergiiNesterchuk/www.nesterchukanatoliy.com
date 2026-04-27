@@ -24,6 +24,7 @@ export const PUT = adminGuard(async (
   try {
     const { id } = await params;
     const body = await req.json();
+    if (body.slug) body.slug = body.slug.replace(/^\/+/, "").replace(/\/+$/, "").replace(/--+/g, "-").trim().toLowerCase();
     const post = await prisma.blogPost.update({ where: { id }, data: body });
     return successResponse(post);
   } catch (error) {

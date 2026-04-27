@@ -13,7 +13,8 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = decodeURIComponent(rawSlug).replace(/^\/+/, "").replace(/\/+$/, "").trim();
   try {
     const post = await prisma.blogPost.findFirst({
       where: { slug, isPublished: true },
@@ -37,7 +38,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function BlogPostPage({ params }: Props) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  // Нормалізувати slug: прибрати зайві символи, decode
+  const slug = decodeURIComponent(rawSlug).replace(/^\/+/, "").replace(/\/+$/, "").trim();
 
   const post = await prisma.blogPost.findFirst({
     where: { slug, isPublished: true },

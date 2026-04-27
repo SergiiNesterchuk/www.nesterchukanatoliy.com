@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-04-27 — Bugfix: blog 404 через слеш на початку slug
+
+### Root cause
+Slug статті про яблучний оцет в БД починався зі `/`:
+`/naturalnyi-yabluchnyi-otset-koryst-...` замість `naturalnyi-yabluchnyi-otset-koryst-...`
+Link генерував `/blog//naturalnyi...` → Next.js не матчив route → 404.
+
+### Fix
+- Виправлено slug в БД (прибрано `/` на початку)
+- Додано normalizeSlug при збереженні в admin API (POST/PUT)
+- Додано decodeURIComponent + trim в blog detail page
+- Бордоська суміш працювала бо її slug був без `/`
+
+---
+
 ## 2026-04-27 — Блог як керована сторінка + upload обкладинки
 
 ### Доробки
