@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-04-27 — YouTube embed у статтях блогу
+
+- sanitize-html.ts: дозволено iframe тільки для YouTube embed (youtube.com/embed/, youtube-nocookie.com/embed/)
+- Non-YouTube iframe видаляються
+- YouTube iframe обгортається в responsive container (aspect-ratio: 16/9)
+- Event handlers (onclick/onload) прибираються з iframe
+
+---
+
 ## 2026-04-27 — Bugfix: blog 404 через слеш на початку slug
 
 ### Root cause
