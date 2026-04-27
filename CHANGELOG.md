@@ -5,6 +5,29 @@
 
 ---
 
+## 2026-04-27 — Блог/статті
+
+### Що додано
+- **Prisma model BlogPost**: title, slug, excerpt, content (HTML), coverImageUrl, publishedAt, isPublished, seoTitle, seoDescription, ctaLabel, ctaUrl, sortOrder
+- **Admin**: `/admin/blog` — CRUD для статей, auto-slug з кирилиці, CTA кнопка, SEO поля
+- **Public**: `/blog/` — список опублікованих статей, `/blog/[slug]/` — окрема стаття
+- **CTA button**: в кожній статті можна додати кнопку "Купити яблучний оцет" → /katalog/
+- **Sitemap**: published blog posts автоматично включаються
+- **SEO**: canonical, og:title, og:description, og:image
+- **Seed**: 2 draft-статті (isPublished=false) для прикладу
+- **Безпека**: content рендериться через sanitizeHtml (без script/iframe)
+
+### Routes
+- `/blog/` — список статей
+- `/blog/[slug]/` — окрема стаття
+- `/api/admin/blog` — CRUD API
+- `/admin/blog` — адмін-панель
+
+### Бізнес-логіка: НЕ змінена
+Checkout, WayForPay, KeyCRM, платежі, доставка, auth — без змін.
+
+---
+
 ## 2026-04-26 — Mobile-responsive адмін-панель
 
 ### Що зроблено

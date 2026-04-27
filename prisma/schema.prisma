@@ -259,6 +259,26 @@ model Page {
   updatedAt     DateTime @updatedAt
 }
 
+model BlogPost {
+  id              String    @id @default(cuid())
+  title           String
+  slug            String    @unique
+  excerpt         String?
+  content         String    @db.Text
+  coverImageUrl   String?
+  publishedAt     DateTime?
+  isPublished     Boolean   @default(false)
+  seoTitle        String?
+  seoDescription  String?
+  ctaLabel        String?
+  ctaUrl          String?
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([isPublished, publishedAt])
+}
+
 model Banner {
   id          String   @id @default(cuid())
   title       String

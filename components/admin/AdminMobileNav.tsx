@@ -17,6 +17,7 @@ const navItems = [
   { href: "/admin/categories", label: "Категорії", icon: FolderOpen },
   { href: "/admin/orders", label: "Замовлення", icon: ShoppingCart },
   { href: "/admin/reviews", label: "Відгуки", icon: Star },
+  { href: "/admin/blog", label: "Блог", icon: FileText },
   { href: "/admin/pages", label: "Сторінки", icon: FileText },
   { href: "/admin/payment-methods", label: "Оплата", icon: CreditCard },
   { href: "/admin/redirects", label: "Redirects", icon: CornerDownRight },
