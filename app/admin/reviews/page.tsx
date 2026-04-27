@@ -32,11 +32,18 @@ export default function AdminReviewsPage() {
   const [createProductId, setCreateProductId] = useState("");
   const [createForm, setCreateForm] = useState({ customerName: "", rating: 5, text: "", displayDate: "" });
 
+  const [loadError, setLoadError] = useState("");
+
   const load = (status: string) => {
     setLoading(true);
+    setLoadError("");
     adminFetch(`/api/admin/reviews?status=${status}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
       .then((d) => { if (d.success) setReviews(d.data); })
+      .catch(() => setLoadError("Не вдалося завантажити відгуки. Спробуйте оновити сторінку або увійдіть повторно."))
       .finally(() => setLoading(false));
   };
 
@@ -226,7 +233,8 @@ export default function AdminReviewsPage() {
               )}
             </div>
           ))}
-          {reviews.length === 0 && <div className="p-8 text-center text-gray-500">Відгуків немає</div>}
+          {loadError && <div className="p-8 text-center text-red-500">{loadError}</div>}
+          {!loadError && reviews.length === 0 && <div className="p-8 text-center text-gray-500">Відгуків немає</div>}
         </div>
       )}
     </div>

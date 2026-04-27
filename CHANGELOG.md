@@ -5,7 +5,21 @@
 
 ---
 
-## 2026-04-27 — Авт��матичне видалення зображень з Cloudflare R2
+## 2026-04-27 — Fix ERR_TOO_MANY_REDIRECTS для admin API
+
+### Root cause
+adminFetch при 401 робив redirect на login. Якщо admin_token невалідна
+але присутня, middleware пропускав, page рендерилась, adminFetch 401,
+redirect, loop. Також /api/ paths не повинні редіректитись на login.
+
+### Fix
+- adminFetch: перевіряє чи вже на login page перед redirect
+- middleware: виключає /api/ з redirect (API повертає JSON 401)
+- Reviews page: error state замість "Відгуків немає" при failed fetch
+
+---
+
+## 2026-04-27 — Автоматичне видалення зображень з Cloudflare R2
 
 ### Аудит
 - Storage: Cloudflare R2 (S3-compatible), `shared/storage.ts`
