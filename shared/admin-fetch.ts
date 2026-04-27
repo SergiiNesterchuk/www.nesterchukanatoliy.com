@@ -1,7 +1,7 @@
 /**
- * Простий fetch для адмінки. Передає cookies. Не робить redirect.
- * Кожна admin page сама вирішує що робити при 401.
+ * Fetch для адмінки з credentials і без кешу.
+ * cache: "no-store" обходить кешовані 308 redirects з trailingSlash.
  */
 export async function adminFetch(url: string, options?: RequestInit): Promise<Response> {
-  return fetch(url, { ...options, credentials: "same-origin" });
+  return fetch(url, { ...options, credentials: "same-origin", cache: "no-store" });
 }

@@ -21,7 +21,7 @@ interface Review {
 
 export default function AdminReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("approved");
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ customerName: "", rating: 5, text: "", displayDate: "" });
