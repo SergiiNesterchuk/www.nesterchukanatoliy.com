@@ -6,7 +6,7 @@ import { successResponse, errorResponse } from "@/shared/api-response";
 export const GET = adminGuard(async (req: NextRequest) => {
   try {
     const status = req.nextUrl.searchParams.get("status") || "";
-    const where = status ? { status } : {};
+    const where = status && status !== "all" ? { status } : {};
 
     const reviews = await prisma.productReview.findMany({
       where,
