@@ -3,6 +3,7 @@ import { prisma } from "@/shared/db";
 import { adminGuard } from "@/shared/admin-auth";
 import { productUpdateSchema } from "@/validators/admin.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
+import { deleteFile } from "@/shared/storage";
 
 export const GET = adminGuard(async (
   _req: NextRequest,
@@ -79,7 +80,13 @@ export const DELETE = adminGuard(async (
 ) => {
   try {
     const { id } = await params;
+    // Видалити images з R2 перед видаленням product
+    const images = await prisma.productImage.findMany({ where: { productId: id }, select: { url: true } });
     await prisma.product.delete({ where: { id } });
+    // Cleanup R2 (non-blocking, не ламає основний flow)
+    for (const img of images) {
+      deleteFile(img.url).catch(() => {});
+    }
     return successResponse({ deleted: true });
   } catch (error) {
     return errorResponse(error);

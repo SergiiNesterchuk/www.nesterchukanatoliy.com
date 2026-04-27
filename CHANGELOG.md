@@ -5,6 +5,26 @@
 
 ---
 
+## 2026-04-27 — Авт��матичне видалення зображень з Cloudflare R2
+
+### Аудит
+- Storage: Cloudflare R2 (S3-compatible), `shared/storage.ts`
+- `deleteFile(url)` вже існував — витягує key з URL і робить S3 DeleteObject
+- Використовувався тільки при видаленні окремого image товару
+- **НЕ використовувався** при: видаленні product, видаленні blog post, заміні cover image
+
+### Fix
+- **Product delete**: перед видаленням отримує всі images → deleteFile кожного з R2
+- **Blog delete**: видаляє coverImageUrl з R2
+- **Blog update**: при за��іні cover image — видаляє старе з R2
+- Всі delete операції non-blocking (catch) — не ламають основний flow
+
+### Файли
+- `app/api/admin/products/[id]/route.ts`
+- `app/api/admin/blog/[id]/route.ts`
+
+---
+
 ## 2026-04-27 — YouTube embed у статтях блогу
 
 - sanitize-html.ts: дозволено iframe тільки для YouTube embed (youtube.com/embed/, youtube-nocookie.com/embed/)
