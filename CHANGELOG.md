@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-04-29 — Drag-and-drop порядок для категорій і товарів
+
+### Що додано
+- Drag-and-drop reorder для категорій в `/admin/categories`
+- Drag-and-drop reorder для товарів в `/admin/products`
+- Колонка "Порядок" (sortOrder) видима в обох списках
+- Кнопка "Зберегти порядок" + попередження про незбережені зміни
+- Кнопки вверх/вниз як fallback для мобільних пристроїв
+- API endpoints: `PATCH /api/admin/categories/reorder`, `PATCH /api/admin/products/reorder`
+
+### Деталі
+- HTML5 Drag and Drop (без зовнішніх бібліотек)
+- sortOrder присвоюється як 10, 20, 30... (кратне 10) для зручності вставки між
+- Публічний сайт вже сортував по `sortOrder asc` — порядок оновлюється одразу після деплою
+- Product.sortOrder вже існував в Prisma schema — schema не змінювалась
+- Товари сортуються глобально (не в межах категорії) — відповідно до архітектури де sortOrder одне поле
+
+### Файли
+- `app/admin/categories/page.tsx` — DnD + save order
+- `app/admin/products/page.tsx` — переписано на client component + DnD + save order
+- `app/api/admin/categories/reorder/route.ts` — новий: batch update sortOrder
+- `app/api/admin/products/reorder/route.ts` — новий: batch update sortOrder
+
+### Перевірка після деплою
+1. /admin/categories — перетягнути, зберегти, refresh — порядок на місці
+2. /admin/products — перетягнути, зберегти, refresh — порядок на місці
+3. Публічний каталог — порядок відповідає admin sortOrder
+
+---
+
 ## 2026-04-28 — Автоматичне списання залишків + безпечний db push
 
 ### Списання залишків
