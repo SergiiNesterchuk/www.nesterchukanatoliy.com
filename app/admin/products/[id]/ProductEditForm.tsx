@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AdminForm } from "@/components/admin/AdminForm";
 import { Input } from "@/components/ui/Input";
 import { Trash2, Upload, ChevronLeft, ChevronRight } from "lucide-react";
+import { generateSlug } from "@/shared/slug";
 
 interface ProductImage {
   id: string;
@@ -38,6 +39,21 @@ interface Props {
 export function ProductEditForm({ product, categories, isNew, images: initialImages }: Props) {
   const [images, setImages] = useState<ProductImage[]>(initialImages || []);
   const [uploading, setUploading] = useState(false);
+  const [slug, setSlug] = useState(product.slug);
+  const [slugManual, setSlugManual] = useState(!isNew);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isNew && !slugManual && nameRef.current) {
+      const handler = () => {
+        const val = nameRef.current?.value || "";
+        setSlug(generateSlug(val));
+      };
+      const input = nameRef.current;
+      input.addEventListener("input", handler);
+      return () => input.removeEventListener("input", handler);
+    }
+  }, [isNew, slugManual]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -159,8 +175,32 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
         submitLabel={isNew ? "Створити" : "Зберегти зміни"}
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Input id="name" name="name" label="Назва *" defaultValue={product.name} required />
-          <Input id="slug" name="slug" label="Slug *" defaultValue={product.slug} required />
+          <Input id="name" name="name" label="Назва *" defaultValue={product.name} required ref={nameRef} />
+          <div>
+            <Input
+              id="slug"
+              name="slug"
+              label="Slug *"
+              value={slug}
+              onChange={(e) => {
+                setSlug(e.target.value);
+                setSlugManual(true);
+              }}
+              required
+            />
+            {isNew && slugManual && (
+              <button
+                type="button"
+                className="text-xs text-green-600 hover:underline mt-1"
+                onClick={() => {
+                  setSlugManual(false);
+                  setSlug(generateSlug(nameRef.current?.value || ""));
+                }}
+              >
+                Генерувати з назви
+              </button>
+            )}
+          </div>
           <Input id="sku" name="sku" label="SKU *" defaultValue={product.sku} required />
           <div>
             <label htmlFor="categoryId" className="block text-sm font-medium text-gray-700 mb-1">Категорія *</label>
