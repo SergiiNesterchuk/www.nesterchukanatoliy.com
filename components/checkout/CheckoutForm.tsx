@@ -97,6 +97,16 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
         setSelectedPaymentMethod("card_online");
       });
   }, []);
+  // Auto-reset payment method if COD becomes unavailable (cart total decreased)
+  useEffect(() => {
+    if (!selectedPaymentMethod || paymentMethods.length === 0) return;
+    const selectedIsCod = selectedPaymentMethod.includes("cod");
+    if (selectedIsCod && totalPrice() <= COD_PREPAYMENT_AMOUNT) {
+      const firstAvailable = paymentMethods.find((pm) => !pm.key.includes("cod"));
+      if (firstAvailable) setSelectedPaymentMethod(firstAvailable.key);
+    }
+  }, [items, selectedPaymentMethod, paymentMethods]);
+
   const [courierAddress, setCourierAddress] = useState("");
   const [npError, setNpError] = useState("");
 
@@ -445,9 +455,14 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
       <section>
         <h2 className="text-lg font-semibold mb-4">3. Оплата</h2>
         <div className="space-y-3">
-          {paymentMethods.map((pm) => {
+          {paymentMethods
+            .filter((pm) => {
+              // Hide COD prepayment when total <= prepayment amount (no sense paying 200 for a 200 order)
+              if (pm.key.includes("cod") && totalPrice() <= COD_PREPAYMENT_AMOUNT) return false;
+              return true;
+            })
+            .map((pm) => {
             const isCod = pm.key.includes("cod");
-            const prepayUAH = COD_PREPAYMENT_AMOUNT / 100;
             const total = totalPrice();
             const prepay = isCod ? Math.min(COD_PREPAYMENT_AMOUNT, total) : 0;
             const remaining = isCod ? total - prepay : 0;

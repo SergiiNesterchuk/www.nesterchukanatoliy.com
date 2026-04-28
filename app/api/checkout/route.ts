@@ -13,6 +13,24 @@ export async function POST(request: NextRequest) {
     const isCod = validated.paymentMethod.includes("cod");
     const isBankTransfer = validated.paymentMethod === "bank_transfer";
 
+    // Pre-validate COD: calculate total from product prices before creating order
+    if (isCod) {
+      const productIds = validated.items.map((i: { productId: string }) => i.productId);
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds }, isActive: true },
+        select: { id: true, price: true },
+      });
+      const priceMap = new Map(products.map((p) => [p.id, p.price]));
+      const estimatedTotal = validated.items.reduce((sum: number, item: { productId: string; quantity: number }) => {
+        return sum + (priceMap.get(item.productId) || 0) * item.quantity;
+      }, 0);
+
+      if (estimatedTotal <= COD_PREPAYMENT_AMOUNT) {
+        console.log("[Checkout] COD prepayment rejected: totalAmount=%d, paymentMethod=%s, reason=total <= prepayment threshold", estimatedTotal, validated.paymentMethod);
+        return errorResponse(new Error("Накладений платіж з передплатою доступний для замовлень понад 200 грн."));
+      }
+    }
+
     // For COD: set prepayment fields before order creation
     const order = await OrderService.createOrder({
       customerName: validated.customerName,
