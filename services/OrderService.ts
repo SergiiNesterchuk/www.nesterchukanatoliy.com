@@ -116,6 +116,26 @@ export class OrderService {
       logger.warn("Customer/history creation failed", { error: e instanceof Error ? e.message : String(e) });
     }
 
+    // Decrement product stock quantities
+    try {
+      const { prisma } = await import("@/shared/db");
+      for (const item of input.items) {
+        const product = productMap.get(item.productId);
+        if (product && product.quantity !== null) {
+          const newQty = product.quantity - item.quantity;
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: {
+              quantity: Math.max(0, newQty),
+              ...(newQty <= 0 ? { stockStatus: "out_of_stock" } : {}),
+            },
+          });
+        }
+      }
+    } catch (e) {
+      logger.warn("Stock decrement failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+    }
+
     logger.info("Order created", { orderId: order.id, orderNumber: order.orderNumber, total: order.total });
     return order;
   }

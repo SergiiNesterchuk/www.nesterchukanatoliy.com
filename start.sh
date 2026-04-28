@@ -6,7 +6,7 @@ echo "=== Starting application ==="
 # Apply database schema if DATABASE_URL is set
 if [ -n "$DATABASE_URL" ]; then
   echo "Running prisma db push..."
-  npx prisma db push --url "$DATABASE_URL" --accept-data-loss 2>&1 || echo "Warning: db push failed, continuing..."
+  npx prisma db push --url "$DATABASE_URL" 2>&1 || echo "Warning: db push failed (safe mode: refused destructive changes), continuing..."
   echo "Database schema applied."
 else
   echo "Warning: DATABASE_URL not set, skipping database setup."
