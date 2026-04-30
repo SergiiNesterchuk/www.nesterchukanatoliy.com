@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 async function syncOrderSnapshot(keycrmOrderId: string, eventName: string, context: Record<string, unknown>) {
   const order = await prisma.order.findFirst({ where: { keycrmOrderId } });
   if (!order) {
-    logger.warn("Webhook: order not found locally", { keycrmOrderId });
+    logger.warn("Webhook: order not found locally", { keycrmOrderId, event: eventName });
     await IntegrationLogRepository.create({
       integration: "keycrm",
       direction: "inbound",
@@ -99,6 +99,7 @@ async function syncOrderSnapshot(keycrmOrderId: string, eventName: string, conte
   if (!keycrmOrder) {
     logger.info("Webhook: using context fallback (API fetch failed)", {
       keycrmOrderId,
+      orderNumber: order.orderNumber,
       contextKeys: Object.keys(context),
     });
   }
@@ -296,13 +297,13 @@ function extractOrderFields(data: Record<string, unknown>): ExtractedFields {
 
 async function syncOrderStatus(
   extracted: ExtractedFields,
-  order: { id: string; status: string; keycrmStatusName: string | null },
+  order: { id: string; orderNumber: string; status: string; keycrmStatusName: string | null },
   updateData: Record<string, unknown>,
   historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
 ) {
   const { statusId, statusGroupId, statusName } = extracted;
   if (!statusName && !statusId && !statusGroupId) {
-    logger.warn("syncOrderStatus: no status data at all", { orderId: order.id });
+    logger.warn("syncOrderStatus: no status data at all", { orderId: order.id, orderNumber: order.orderNumber });
     return;
   }
 
@@ -311,6 +312,7 @@ async function syncOrderStatus(
 
   logger.info("syncOrderStatus: mapping", {
     orderId: order.id,
+    orderNumber: order.orderNumber,
     keycrmStatusId: statusId,
     keycrmStatusGroupId: statusGroupId,
     keycrmStatusName: statusName,
@@ -323,6 +325,7 @@ async function syncOrderStatus(
   if (newPublicStatus === undefined) {
     logger.warn("syncOrderStatus: UNMAPPED status_id — add to KEYCRM_STATUS_ID_MAP in shared/keycrm-status-map.ts", {
       orderId: order.id,
+      orderNumber: order.orderNumber,
       statusId,
       statusGroupId,
       statusName,
@@ -388,7 +391,7 @@ const DELIVERY_HISTORY_MAP: Record<string, string> = {
 
 function syncDeliveryAndTracking(
   extracted: ExtractedFields,
-  order: { id: string; deliveryStatus: string | null; trackingNumber: string | null; shippedAt: Date | null; deliveredAt: Date | null; status: string },
+  order: { id: string; orderNumber: string; deliveryStatus: string | null; trackingNumber: string | null; shippedAt: Date | null; deliveredAt: Date | null; status: string },
   updateData: Record<string, unknown>,
   historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
 ) {
@@ -413,7 +416,7 @@ function syncDeliveryAndTracking(
     updateData.trackingNumber = trackingCode;
     trackingChanged = true;
     if (!newDelivery && (oldDelivery === "pending" || !order.deliveryStatus)) newDelivery = "shipped";
-    logger.info("tracking extracted", { orderId: order.id, trackingCode, old: order.trackingNumber });
+    logger.info("tracking extracted", { orderId: order.id, orderNumber: order.orderNumber, trackingCode, old: order.trackingNumber });
   }
 
   // 4. Apply delivery status
@@ -445,7 +448,7 @@ function syncDeliveryAndTracking(
 
 function syncPaymentStatus(
   data: Record<string, unknown>,
-  order: { id: string; paymentStatus: string; total: number; paymentMethod: string },
+  order: { id: string; orderNumber: string; paymentStatus: string; total: number; paymentMethod: string },
   updateData: Record<string, unknown>,
   historyEntries: Array<{ source: string; oldStatus: string; newStatus: string; message: string }>
 ) {

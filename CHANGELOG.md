@@ -5,6 +5,22 @@
 
 ---
 
+## 2026-04-30 — Покращення логування webhook + override для status_id 21
+
+### Що змінено
+- Додано `status_id: 21 → "approval"` в `KEYCRM_STATUS_ID_OVERRIDES` — тепер навіть при холодному кеші (після рестарту) цей статус маппиться коректно і не генерує WARN
+- Додано `orderNumber` в усі WARN/ERROR/INFO логи webhook-функцій (`syncOrderStatus`, `syncDeliveryAndTracking`, `syncPaymentStatus`) — тепер у Railway логах видно номер замовлення (K-XXXX) поруч з orderId
+
+### Контекст
+- У логах Railway спостерігались повторювані WARN `UNMAPPED status_id=21` для замовлень K-5069, K-5054, K-5067 та інших — причина: cold cache після рестарту, а 21 не було в overrides
+- Помилка `"Canceled payments cannot be updated"` (K-5075) — разова, вирішилась автоматично через fallback (нова оплата #3867 прикріплена як paid)
+
+### Файли
+- `shared/keycrm-status-map.ts` — додано override 21 → approval
+- `app/api/webhooks/keycrm/order-status/route.ts` — orderNumber в логах + типи функцій
+
+---
+
 ## 2026-04-29 — Drag-and-drop порядок для категорій і товарів
 
 ### Що додано
