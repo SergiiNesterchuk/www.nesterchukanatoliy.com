@@ -5,6 +5,8 @@ import { successResponse, errorResponse } from "@/shared/api-response";
 import { prisma } from "@/shared/db";
 import { COD_PREPAYMENT_AMOUNT } from "@/shared/constants";
 
+const paymentsDisabled = process.env.PAYMENTS_ENABLED === "false";
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -71,6 +73,24 @@ export async function POST(request: NextRequest) {
 
       // Create WayForPay session for prepayment amount only
       const payment = await OrderService.createPaymentForOrder(order.id, prepaymentAmount);
+
+      // Test mode: auto-mark COD prepayment as paid
+      if (paymentsDisabled) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: "partial_paid", paymentProvider: "test_mode" },
+        }).catch(() => {});
+
+        return successResponse({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          paymentMethod: validated.paymentMethod,
+          requiresOnlinePayment: false,
+          prepaymentAmount,
+          remainingAmount: order.total - prepaymentAmount,
+          testMode: true,
+        });
+      }
 
       // Синхронізувати з KeyCRM одразу (з unpaid prepayment + remainder)
       if (process.env.CRM_SYNC_ENABLED !== "false") {
@@ -141,6 +161,22 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
 
       const payment = await OrderService.createPaymentForOrder(order.id);
+
+      // Test mode: auto-mark as paid when payments disabled
+      if (paymentsDisabled) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { paymentStatus: "paid", paymentProvider: "test_mode" },
+        }).catch(() => {});
+
+        return successResponse({
+          orderId: order.id,
+          orderNumber: order.orderNumber,
+          paymentMethod: validated.paymentMethod,
+          requiresOnlinePayment: false,
+          testMode: true,
+        });
+      }
 
       // Синхронізувати замовлення в KeyCRM одразу (з unpaid payment)
       if (process.env.CRM_SYNC_ENABLED !== "false") {

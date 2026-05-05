@@ -272,6 +272,14 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
         }
       } catch { /* */ }
 
+      // Test mode: show alert and go to success (no real payment)
+      if (data.data.testMode) {
+        alert(`ТЕСТОВИЙ РЕЖИМ\n\nЗамовлення ${data.data.orderNumber} створено.\nОплата зарахована автоматично (WayForPay не викликався).\nKeyCRM синхронізація вимкнена.`);
+        const pmParam = data.data.paymentMethod ? `&pm=${data.data.paymentMethod}` : "";
+        window.location.href = `/checkout/success?order=${data.data.orderNumber}${pmParam}`;
+        return;
+      }
+
       if (data.data.requiresOnlinePayment && data.data.payment?.formFields) {
         const paymentData = encodeURIComponent(JSON.stringify({ url: data.data.payment.url, fields: data.data.payment.formFields }));
         window.location.href = `/checkout/pay?data=${paymentData}`;
