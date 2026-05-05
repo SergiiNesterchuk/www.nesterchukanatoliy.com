@@ -4,11 +4,13 @@ import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { prisma } from "@/shared/db";
+import { isStaging } from "@/shared/features";
 
 export const maxDuration = 60;
 
 export const POST = adminGuard(async (_req: NextRequest) => {
-  if (process.env.NEXT_PUBLIC_APP_ENV !== "staging") {
+  // Hard protection: only staging
+  if (!isStaging) {
     return NextResponse.json(
       { success: false, error: "Sync available only on staging" },
       { status: 403 }
@@ -16,6 +18,8 @@ export const POST = adminGuard(async (_req: NextRequest) => {
   }
 
   const prodUrl = process.env.PROD_DATABASE_URL;
+  const localUrl = process.env.DATABASE_URL;
+
   if (!prodUrl) {
     return NextResponse.json(
       { success: false, error: "PROD_DATABASE_URL not configured" },
@@ -23,8 +27,19 @@ export const POST = adminGuard(async (_req: NextRequest) => {
     );
   }
 
+  // Safety: abort if staging DB URL equals production DB URL
+  if (localUrl && localUrl === prodUrl) {
+    return NextResponse.json(
+      { success: false, error: "SAFETY: DATABASE_URL equals PROD_DATABASE_URL. Aborting." },
+      { status: 500 }
+    );
+  }
+
   const prodPool = new pg.Pool({ connectionString: prodUrl });
   const prodPrisma = new PrismaClient({ adapter: new PrismaPg(prodPool) });
+
+  // prodPrisma is used ONLY for read operations (findMany/findFirst) below.
+  // All write operations (deleteMany/create) go through `prisma` (staging DB).
 
   try {
     // Clear staging content (FK order matters)

@@ -8,6 +8,7 @@ import { createLogger } from "@/shared/logger";
 import { buildAbsoluteUrl } from "@/shared/url";
 import { generatePublicOrderNumber } from "@/shared/order-number";
 import { generateOrderAccessToken } from "@/shared/access-token";
+import { isMockPayments, crmSyncEnabled } from "@/shared/features";
 
 const logger = createLogger("OrderService");
 
@@ -146,8 +147,8 @@ export class OrderService {
    * @param overrideAmount - optional: pay this amount instead of order.total (for COD prepayment)
    */
   static async createPaymentForOrder(orderId: string, overrideAmount?: number) {
-    if (process.env.PAYMENTS_ENABLED === "false") {
-      logger.info("Payments disabled, skipping", { orderId });
+    if (isMockPayments || !process.env.WAYFORPAY_MERCHANT_ACCOUNT || process.env.PAYMENTS_ENABLED === "false") {
+      logger.info("Payments disabled or mock mode, skipping WayForPay", { orderId, mode: isMockPayments ? "mock" : "disabled" });
       return null;
     }
 
@@ -198,6 +199,68 @@ export class OrderService {
     });
 
     return session;
+  }
+
+  /**
+   * Mock payment: simulate a successful payment through the same status update
+   * path as a real WayForPay callback. Creates PaymentEvent, updates order status,
+   * triggers email notification. CRM sync respects crmSyncEnabled flag.
+   *
+   * Only works when PAYMENTS_MODE=mock or PAYMENTS_ENABLED=false.
+   */
+  static async applyMockPayment(orderId: string, overrideAmount?: number) {
+    const order = await OrderRepository.findById(orderId);
+    if (!order) throw new PaymentError("Order not found for mock payment");
+
+    const amount = overrideAmount || order.total;
+    const isCodPrepayment = order.paymentPurpose === "cod_prepayment" || order.paymentMethod.includes("cod");
+    const newPaymentStatus = isCodPrepayment ? "partial_paid" : "paid";
+    const mockTxId = `MOCK-${Date.now()}`;
+
+    const { prisma } = await import("@/shared/db");
+
+    // PaymentEvent — same as real callback
+    await prisma.paymentEvent.create({
+      data: {
+        orderId: order.id,
+        provider: "mock",
+        eventType: "success",
+        externalId: mockTxId,
+        amount,
+        currency: order.currency,
+        rawPayload: JSON.stringify({ mock: true, timestamp: new Date().toISOString() }),
+        signatureValid: true,
+      },
+    });
+
+    // Update order — same fields as real callback
+    await OrderRepository.updatePaymentStatus(order.id, {
+      paymentStatus: newPaymentStatus,
+      paymentProvider: "mock",
+      externalPaymentId: mockTxId,
+      status: isCodPrepayment ? "new" : "paid",
+    });
+
+    // Status history
+    const statusMessage = isCodPrepayment
+      ? `[MOCK] Передплату ${(amount / 100).toFixed(0)} грн отримано`
+      : "[MOCK] Оплату отримано";
+    await prisma.orderStatusHistory.create({
+      data: { orderId: order.id, source: "payment", oldStatus: order.paymentStatus, newStatus: newPaymentStatus, message: statusMessage },
+    }).catch(() => {});
+
+    // Email notification — same as real callback (allows testing email templates)
+    import("@/services/NotificationService").then(({ NotificationService }) => {
+      OrderRepository.findById(order.id).then((updatedOrder) => {
+        if (updatedOrder) {
+          NotificationService.sendOrderConfirmation(updatedOrder).catch((e) => {
+            logger.error("Mock email notification failed", { orderId: order.id, error: e instanceof Error ? e.message : String(e) });
+          });
+        }
+      });
+    });
+
+    logger.info("Mock payment applied", { orderId: order.id, orderNumber: order.orderNumber, amount, status: newPaymentStatus });
   }
 
   static async handlePaymentCallback(rawBody: string, headers: Record<string, string>) {
@@ -268,7 +331,7 @@ export class OrderService {
         });
       } catch { /* non-critical */ }
 
-      if (process.env.CRM_SYNC_ENABLED !== "false") {
+      if (crmSyncEnabled) {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
           // COD prepayment → спеціальна фун��ція з двома payments (prepayment + remainder)
@@ -322,7 +385,7 @@ export class OrderService {
       } catch { /* non-critical */ }
 
       // Sync to KeyCRM: reversal if already synced, create if not
-      if (process.env.CRM_SYNC_ENABLED !== "false") {
+      if (crmSyncEnabled) {
         await OrderRepository.updateKeycrmSync(order.id, { keycrmSyncStatus: "pending" });
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();

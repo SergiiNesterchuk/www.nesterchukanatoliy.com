@@ -5,6 +5,27 @@
 
 ---
 
+## 2026-05-06 — Staging hardening: centralized flags, mock payment lifecycle, sync protection
+
+### Що додано
+- **`shared/features.ts`** — централізовані feature flags (appEnv, isStaging, paymentsMode, crmSyncEnabled, analyticsEnabled)
+- **`PAYMENTS_MODE`** — новий env: `live | mock | sandbox | disabled` (backward-compatible з PAYMENTS_ENABLED)
+- **`OrderService.applyMockPayment()`** — mock payment через shared status update path (PaymentEvent, StatusHistory, email notification)
+- **Mock callback кнопки в адмінці** — на сторінці замовлення: "Оплата пройшла", "Оплата не пройшла", "Повернення коштів"
+- **`POST /api/admin/test-payments/mock-callback`** — staging-only endpoint для імітації payment scenarios
+- **Hardened sync protection** — DATABASE_URL !== PROD_DATABASE_URL check, коментар про read-only usage
+
+### Що замінено
+- Розкидані `process.env.PAYMENTS_ENABLED === "false"` → `isMockPayments` з `shared/features.ts`
+- Розкидані `process.env.CRM_SYNC_ENABLED !== "false"` → `crmSyncEnabled` з `shared/features.ts`
+- `isStaging` в layout/admin → з `shared/features.ts`
+- `analyticsEnabled` в layout → з `shared/features.ts`
+
+### Документація
+- STAGING.md: PAYMENTS_MODE, mock payment flow, R2 shared, email enabled, PROD_DATABASE_URL safety, TestovaGilka workflow
+
+---
+
 ## 2026-05-06 — Кнопка синхронізації + mock-оплата для тестового сайту
 
 ### Що додано

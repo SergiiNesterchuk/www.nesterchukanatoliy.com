@@ -6,8 +6,7 @@ import {
   CheckCircle,
 } from "lucide-react";
 import { SyncFromProductionButton } from "@/components/admin/SyncFromProductionButton";
-
-const isStaging = process.env.NEXT_PUBLIC_APP_ENV === "staging";
+import { isStaging } from "@/shared/features";
 
 export const dynamic = "force-dynamic";
 

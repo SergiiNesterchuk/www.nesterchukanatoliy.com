@@ -59,14 +59,72 @@ PROD_DATABASE_URL="$PROD_URL" DATABASE_URL="$STAGING_URL" npx tsx scripts/sync-t
 
 ---
 
+## PAYMENTS_MODE
+
+| Режим | Env | Поведінка |
+|---|---|---|
+| `live` | `PAYMENTS_MODE=live` або не задано + `PAYMENTS_ENABLED=true` | Реальний WayForPay |
+| `mock` | `PAYMENTS_MODE=mock` або `PAYMENTS_ENABLED=false` | Auto-paid через shared flow, alert |
+| `sandbox` | `PAYMENTS_MODE=sandbox` | Тестові WayForPay credentials (майбутнє) |
+| `disabled` | `PAYMENTS_MODE=disabled` | Платежі повністю вимкнені |
+
+Centralized config: `shared/features.ts`
+
+---
+
 ## Mock-оплата (тестовий режим)
 
-При оформленні замовлення на тестовому сайті:
+### При оформленні замовлення (checkout)
 1. Натискаєш "Оплатити" → замовлення створюється
-2. З'являється alert: **"ТЕСТОВИЙ РЕЖИМ — оплата зарахована автоматично"**
-3. Перенаправлення на сторінку успіху
-4. Замовлення має статус "paid" з provider "test_mode"
-5. WayForPay НЕ викликається, KeyCRM НЕ синхронізується
+2. `OrderService.applyMockPayment()` — проходить той самий шлях що й реальний callback:
+   - Створює PaymentEvent (provider: "mock")
+   - Оновлює paymentStatus через OrderRepository
+   - Записує StatusHistory
+   - Тригерить email notification (для тестування шаблонів)
+3. Frontend показує alert: **"ТЕСТОВИЙ РЕЖИМ"**
+4. Redirect на success page
+
+### Ручне тестування сценаріїв (адмінка)
+В адмінці на сторінці замовлення є блок **"Тестова оплата"** з 3 кнопками:
+- **Оплата пройшла** → paymentStatus: paid / partial_paid
+- **Оплата не пройшла** → paymentStatus: failed / prepayment_failed
+- **Повернення коштів** → paymentStatus: refunded
+
+API: `POST /api/admin/test-payments/mock-callback` (staging only, adminGuard)
+Body: `{ "orderId": "...", "action": "success|failure|refund" }`
+
+### Що НЕ тестується в mock
+- Реальний WayForPay redirect/форма
+- Підпис WayForPay callback
+- Для повного тесту payment form — використати `PAYMENTS_MODE=sandbox` з тестовими credentials WayForPay (майбутнє)
+
+---
+
+## R2 / Cloudflare (зображення)
+
+Staging використовує ті самі S3/R2 credentials і URL що й production. Це зроблено свідомо:
+- Фото ідентичні на обох сайтах
+- Staging призначений для тестування коду, не для масового редагування зображень
+- Якщо тестуєш upload/delete через адмінку — будь обережний, бо R2 bucket shared
+
+---
+
+## Email
+
+Email на staging **працює** (Resend API key від production). Це зроблено свідомо для тестування шаблонів листів. При тестах використовуй власну пошту.
+
+---
+
+## PROD_DATABASE_URL — чому це безпечно
+
+`PROD_DATABASE_URL` є у staging env vars для кнопки "Синхронізувати" в адмінці.
+
+**Захисти:**
+1. API endpoint `/api/admin/sync-from-production` перевіряє `isStaging` — на production повертає 403
+2. Перевірка `DATABASE_URL !== PROD_DATABASE_URL` — abort якщо однакові
+3. `adminGuard` — потрібен адмін логін
+4. `prodPrisma` використовується **тільки для read** (findMany/findFirst)
+5. Всі write операції йдуть через `prisma` (staging DB)
 
 ---
 
@@ -102,19 +160,32 @@ railway run npx tsx prisma/seed.ts
 ## Git Workflow
 
 ```
-main ────────────────────── production (auto-deploy)
-  └── feature/xxx ────────── staging (manual deploy branch switch)
+main ────────────────── production (auto-deploy)
+  │
+  └── TestovaGilka ──── TestoviySite (auto-deploy)
 ```
 
 ### Процес розробки
 
-1. `git checkout -b feature/назва-фічі`
-2. Розробка і commit
-3. Push: `git push origin feature/назва-фічі`
-4. В Railway staging: встановити deploy branch на `feature/назва-фічі`
-5. Тестування на staging URL
-6. Створити PR: `feature/назва-фічі` > `main`
-7. Merge > production auto-deploy
+1. Працюєш у гілці `TestovaGilka` (вона вже створена)
+2. Комітиш, пушиш → деплоїться тільки TestoviySite
+3. Тестуєш на тестовому сайті
+4. Все ок → merge в main → деплоїться production
+5. Повертаєшся в TestovaGilka, продовжуєш
+
+```bash
+git checkout TestovaGilka
+# ... робота ...
+git push
+
+# Готово до production:
+git checkout main
+git merge TestovaGilka
+git push origin main
+
+# Назад до роботи:
+git checkout TestovaGilka
+```
 
 ---
 

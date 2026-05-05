@@ -4,8 +4,7 @@ import { checkoutSchema } from "@/validators/checkout.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
 import { prisma } from "@/shared/db";
 import { COD_PREPAYMENT_AMOUNT } from "@/shared/constants";
-
-const paymentsDisabled = process.env.PAYMENTS_ENABLED === "false";
+import { isMockPayments, crmSyncEnabled } from "@/shared/features";
 
 export async function POST(request: NextRequest) {
   try {
@@ -74,12 +73,9 @@ export async function POST(request: NextRequest) {
       // Create WayForPay session for prepayment amount only
       const payment = await OrderService.createPaymentForOrder(order.id, prepaymentAmount);
 
-      // Test mode: auto-mark COD prepayment as paid
-      if (paymentsDisabled) {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { paymentStatus: "partial_paid", paymentProvider: "test_mode" },
-        }).catch(() => {});
+      // Mock mode: simulate successful payment through shared status update
+      if (isMockPayments) {
+        await OrderService.applyMockPayment(order.id, prepaymentAmount);
 
         return successResponse({
           orderId: order.id,
@@ -93,7 +89,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Синхронізувати з KeyCRM одразу (з unpaid prepayment + remainder)
-      if (process.env.CRM_SYNC_ENABLED !== "false") {
+      if (crmSyncEnabled) {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
           service.createOrder(order.id).catch(async (e) => {
@@ -135,7 +131,7 @@ export async function POST(request: NextRequest) {
       }).catch(() => {});
 
       // Синхронізувати з KeyCRM одразу (з not_paid payment)
-      if (process.env.CRM_SYNC_ENABLED !== "false") {
+      if (crmSyncEnabled) {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
           service.createOrder(order.id).catch(async (e) => {
@@ -162,12 +158,9 @@ export async function POST(request: NextRequest) {
 
       const payment = await OrderService.createPaymentForOrder(order.id);
 
-      // Test mode: auto-mark as paid when payments disabled
-      if (paymentsDisabled) {
-        await prisma.order.update({
-          where: { id: order.id },
-          data: { paymentStatus: "paid", paymentProvider: "test_mode" },
-        }).catch(() => {});
+      // Mock mode: simulate successful payment through shared status update
+      if (isMockPayments) {
+        await OrderService.applyMockPayment(order.id);
 
         return successResponse({
           orderId: order.id,
@@ -179,7 +172,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Синхронізувати замовлення в KeyCRM одразу (з unpaid payment)
-      if (process.env.CRM_SYNC_ENABLED !== "false") {
+      if (crmSyncEnabled) {
         import("@/services/KeyCRMService").then(({ KeyCRMService }) => {
           const service = new KeyCRMService();
           service.createOrder(order.id).catch(async (e) => {

@@ -3,9 +3,8 @@ import Script from "next/script";
 import { inter } from "@/lib/fonts";
 import { SITE_NAME, SITE_URL, SITE_DESCRIPTION } from "@/shared/constants";
 import { StagingBanner } from "@/components/StagingBanner";
+import { analyticsEnabled } from "@/shared/features";
 import "./globals.css";
-
-const isStaging = process.env.NEXT_PUBLIC_APP_ENV === "staging";
 
 export const metadata: Metadata = {
   title: {
@@ -43,7 +42,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col font-sans">
         <StagingBanner />
         {children}
-        {!isStaging && (
+        {analyticsEnabled && (
           <>
             <Script
               id="clarity-tag"

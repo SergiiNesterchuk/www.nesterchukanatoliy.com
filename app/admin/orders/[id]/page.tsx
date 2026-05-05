@@ -134,6 +134,41 @@ export default function AdminOrderDetailPage() {
         </div>
       </div>
 
+      {/* Mock Payment (staging only) */}
+      {process.env.NEXT_PUBLIC_APP_ENV === "staging" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <h2 className="font-semibold text-amber-800 mb-2">Тестова оплата</h2>
+          <div className="flex flex-wrap gap-2">
+            {(["success", "failure", "refund"] as const).map((action) => (
+              <button key={action} onClick={async () => {
+                const labels = { success: "Оплата пройшла", failure: "Оплата не пройшла", refund: "Кошти повернено" };
+                if (!confirm(`Імітувати: "${labels[action]}" для замовлення ${order.orderNumber}?`)) return;
+                const res = await fetch("/api/admin/test-payments/mock-callback", {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ orderId: order.id, action }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                  alert(`${labels[action]}!\nНовий статус: ${data.data.newStatus}`);
+                  const r2 = await fetch(`/api/admin/orders/${id}`);
+                  const d2 = await r2.json();
+                  if (d2.success) setOrder(d2.data);
+                } else {
+                  alert(`Помилка: ${data.error}`);
+                }
+              }}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg border ${
+                action === "success" ? "border-green-300 text-green-700 hover:bg-green-50" :
+                action === "failure" ? "border-red-300 text-red-700 hover:bg-red-50" :
+                "border-orange-300 text-orange-700 hover:bg-orange-50"
+              }`}>
+                {action === "success" ? "Оплата пройшла" : action === "failure" ? "Оплата не пройшла" : "Повернення коштів"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Customer & Delivery */}
       <div className="bg-white rounded-xl border p-4">
         <h2 className="font-semibold mb-3">Клієнт та доставка</h2>
