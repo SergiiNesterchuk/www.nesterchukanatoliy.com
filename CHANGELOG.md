@@ -5,6 +5,30 @@
 
 ---
 
+## 2026-05-06 — Кнопка синхронізації + mock-оплата для тестового сайту
+
+### Що додано
+- **Кнопка "Синхронізувати"** на admin dashboard (тільки TestoviySite) — копіює товари, категорії, фото, налаштування з production одним кліком
+- **API `/api/admin/sync-from-production`** — захищений adminGuard + перевірка `NEXT_PUBLIC_APP_ENV=staging`
+- **Mock-оплата** — при `PAYMENTS_ENABLED=false` замовлення автоматично стає "paid", alert пояснює що це тестовий режим
+- **Env `PROD_DATABASE_URL`** — public URL production PostgreSQL для синхронізації
+
+### Змінені файли
+- `app/api/admin/sync-from-production/route.ts` — новий API endpoint
+- `components/admin/SyncFromProductionButton.tsx` — новий client component
+- `app/admin/page.tsx` — кнопка на dashboard (тільки staging)
+- `app/api/checkout/route.ts` — mock-оплата при PAYMENTS_ENABLED=false
+- `components/checkout/CheckoutForm.tsx` — alert "ТЕСТОВИЙ РЕЖИМ"
+- `scripts/sync-to-staging.ts` — CLI скрипт синхронізації
+- `STAGING.md` — оновлено (TestoviySite, sync, mock-оплата)
+
+### Railway
+- Environment перейменовано: staging → **TestoviySite**
+- Service перейменовано: staging-web → **TestoviySite**
+- Додано `PROD_DATABASE_URL` в TestoviySite env vars
+
+---
+
 ## 2026-05-06 — Staging/Dev Workflow
 
 **Safety commit:** `4c614b5` (перед змінами)

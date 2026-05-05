@@ -1,23 +1,25 @@
-# Staging / Dev Workflow
+# Тестовий сайт (TestoviySite) — Dev Workflow
 
 ## Environments
 
-| | Production | Staging | Local |
+| | Production | TestoviySite | Local |
 |---|---|---|---|
-| **URL** | nesterchukanatoliy.com | staging-xxx.up.railway.app | localhost:3000 |
-| **Branch** | main | feature/* | feature/* |
-| **Database** | Railway PostgreSQL (prod) | Railway PostgreSQL (staging) | Local PostgreSQL |
-| **WayForPay** | Live (PAYMENTS_ENABLED=true) | Disabled (PAYMENTS_ENABLED=false) | Disabled |
-| **KeyCRM** | Live (CRM_SYNC_ENABLED=true) | Disabled (CRM_SYNC_ENABLED=false) | Disabled |
-| **Analytics** | Google Analytics + Clarity | Disabled | Disabled |
+| **URL** | nesterchukanatoliy.com | staging-web-staging-2eaf.up.railway.app | localhost:3000 |
+| **Railway env** | production | TestoviySite | — |
+| **Railway service** | www.nesterchukanatoliy.com | TestoviySite | — |
+| **Branch** | main | main (або feature/*) | feature/* |
+| **Database** | Railway PostgreSQL (prod) | Railway PostgreSQL (окрема) | Local PostgreSQL |
+| **WayForPay** | Live | Mock (auto-paid, alert) | Mock |
+| **KeyCRM** | Live | Disabled | Disabled |
+| **Analytics** | GA + Clarity | Disabled | Disabled |
 | **SEO robots** | index, follow | noindex, nofollow | noindex, nofollow |
 | **Banner** | Немає | "ТЕСТОВИЙ САЙТ..." (жовтий) | "ТЕСТОВИЙ САЙТ..." |
 
 ---
 
-## Env Variables для Staging
+## Env Variables для TestoviySite
 
-Скопіювати з production і змінити:
+Ключові відмінності від production:
 
 ```env
 APP_ENV=staging
@@ -25,23 +27,46 @@ NEXT_PUBLIC_APP_ENV=staging
 PAYMENTS_ENABLED=false
 CRM_SYNC_ENABLED=false
 KEYCRM_STATUS_SYNC_ENABLED=false
-KEYCRM_API_KEY=
-KEYCRM_BASE_URL=
-KEYCRM_WEBHOOK_SECRET=
-WAYFORPAY_MERCHANT_ACCOUNT=
-WAYFORPAY_MERCHANT_SECRET=
-WAYFORPAY_MERCHANT_DOMAIN=
-NEXT_PUBLIC_SITE_URL=https://<staging-url>.up.railway.app
-SITE_URL=https://<staging-url>.up.railway.app
-AUTH_URL=https://<staging-url>.up.railway.app
-ADMIN_JWT_SECRET=<new-random-staging-secret>
-CRON_SECRET=<new-random-staging-secret>
-DATABASE_URL=<staging-postgres-url>
+KEYCRM_API_KEY=disabled
+WAYFORPAY_MERCHANT_ACCOUNT=disabled
+WAYFORPAY_MERCHANT_SECRET=disabled
+WAYFORPAY_MERCHANT_DOMAIN=disabled
+PROD_DATABASE_URL=<production postgres PUBLIC url>   # для кнопки "Синхронізувати"
 ```
 
 Залишити без змін:
 - `NOVAPOSHTA_API_KEY` — read-only пошук вiддiлень, безпечно
-- `S3_*` — можна використовувати prod bucket (зображення)
+- `S3_*` — prod bucket (фото однакові на обох сайтах)
+
+---
+
+## Синхронізація даних з production
+
+### Через адмінку (рекомендовано)
+1. Відкрити тестовий сайт → `/admin`
+2. На Dashboard натиснути **"Синхронізувати"** (жовтий блок)
+3. Підтвердити → товари, категорії, фото, сторінки, налаштування скопіюються з production
+4. Замовлення НЕ копіюються
+
+### Через термінал
+```bash
+railway environment link TestoviySite && railway service link Postgres-cQGI
+STAGING_URL=$(railway variables --json | jq -r '.DATABASE_PUBLIC_URL')
+railway environment link production && railway service link Postgres
+PROD_URL=$(railway variables --json | jq -r '.DATABASE_PUBLIC_URL')
+PROD_DATABASE_URL="$PROD_URL" DATABASE_URL="$STAGING_URL" npx tsx scripts/sync-to-staging.ts
+```
+
+---
+
+## Mock-оплата (тестовий режим)
+
+При оформленні замовлення на тестовому сайті:
+1. Натискаєш "Оплатити" → замовлення створюється
+2. З'являється alert: **"ТЕСТОВИЙ РЕЖИМ — оплата зарахована автоматично"**
+3. Перенаправлення на сторінку успіху
+4. Замовлення має статус "paid" з provider "test_mode"
+5. WayForPay НЕ викликається, KeyCRM НЕ синхронізується
 
 ---
 

@@ -5,6 +5,9 @@ import {
   AlertTriangle,
   CheckCircle,
 } from "lucide-react";
+import { SyncFromProductionButton } from "@/components/admin/SyncFromProductionButton";
+
+const isStaging = process.env.NEXT_PUBLIC_APP_ENV === "staging";
 
 export const dynamic = "force-dynamic";
 
@@ -88,6 +91,12 @@ export default async function AdminDashboard() {
           </div>
         ))}
       </div>
+
+      {isStaging && (
+        <div className="mt-6">
+          <SyncFromProductionButton />
+        </div>
+      )}
 
       {stats.recentErrors > 0 && (
         <div className="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">

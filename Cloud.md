@@ -104,8 +104,9 @@ Not just `host:port`. Use Railway variable reference `${{Postgres.DATABASE_PUBLI
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PAYMENTS_ENABLED` | `true` | `false` → skip WayForPay, orders created as unpaid |
+| `PAYMENTS_ENABLED` | `true` | `false` → skip WayForPay, auto-mark as paid (test mode) |
 | `CRM_SYNC_ENABLED` | `true` | `false` → no KeyCRM API calls |
+| `PROD_DATABASE_URL` | (not set) | Production Postgres PUBLIC URL — for sync button in staging admin |
 | `EMAIL_ENABLED` | `false` | Future: enable email notifications |
 
 ### Future Email
@@ -1247,11 +1248,12 @@ All changes are in external configs — no code changes needed to roll back.
 ```
 Railway Project: beautiful-forgiveness
 ├── Environment: production
-│   ├── Web service (main branch, auto-deploy)
-│   └── PostgreSQL (prod data)
-└── Environment: staging
-    ├── Web service (feature/* branch)
-    └── PostgreSQL (test data)
+│   ├── www.nesterchukanatoliy.com (main branch, auto-deploy)
+│   └── Postgres (prod data)
+└── Environment: TestoviySite
+    ├── TestoviySite service (main branch)
+    ├── Postgres-cQGI (test data)
+    └── PROD_DATABASE_URL → production Postgres (read-only, for sync)
 ```
 
 ### Ключові env flags
@@ -1280,13 +1282,18 @@ Railway Project: beautiful-forgiveness
 | `NEXT_PUBLIC_APP_ENV === "staging"` → noindex | `app/layout.tsx` | robots meta |
 | `NEXT_PUBLIC_APP_ENV === "staging"` → no analytics | `app/layout.tsx` | GA + Clarity |
 
-### Створення staging
+### Синхронізація даних prod → TestoviySite
 
-Див. STAGING.md → "Як створити Staging на Railway"
+**Через адмінку:** TestoviySite → `/admin` → Dashboard → кнопка "Синхронізувати"
+
+**API:** `POST /api/admin/sync-from-production` (тільки при `NEXT_PUBLIC_APP_ENV=staging`)
+
+Копіює: категорії, товари, фото, сторінки, блог, банери, налаштування, payment methods, відгуки.
+Не копіює: замовлення, клієнти, payment events, integration logs.
 
 ### Git workflow
 
 ```
 main ────────── production (auto-deploy)
-  └── feature/* ── staging (manual branch switch in Railway)
+               └── TestoviySite (auto-deploy з main)
 ```
