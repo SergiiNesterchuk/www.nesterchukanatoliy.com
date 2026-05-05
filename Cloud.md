@@ -1235,3 +1235,58 @@ If something breaks after migration:
 5. Redeploy
 
 All changes are in external configs — no code changes needed to roll back.
+
+---
+
+## 23. Staging Environments
+
+> Повна документація: **STAGING.md**
+
+### Architecture
+
+```
+Railway Project: beautiful-forgiveness
+├── Environment: production
+│   ├── Web service (main branch, auto-deploy)
+│   └── PostgreSQL (prod data)
+└── Environment: staging
+    ├── Web service (feature/* branch)
+    └── PostgreSQL (test data)
+```
+
+### Ключові env flags
+
+| Variable | Production | Staging | Local |
+|----------|-----------|---------|-------|
+| `APP_ENV` | (unset) | `staging` | `local` |
+| `NEXT_PUBLIC_APP_ENV` | (unset) | `staging` | `staging` |
+| `PAYMENTS_ENABLED` | `true` | `false` | `false` |
+| `CRM_SYNC_ENABLED` | `true` | `false` | `false` |
+| `KEYCRM_STATUS_SYNC_ENABLED` | (unset) | `false` | `false` |
+| `KEYCRM_API_KEY` | `<key>` | (empty) | (empty) |
+| `WAYFORPAY_MERCHANT_*` | `<credentials>` | (empty) | (empty) |
+
+### Guards у коді
+
+| Guard | Файл | Рядок |
+|-------|------|-------|
+| `PAYMENTS_ENABLED === "false"` → skip WayForPay | `services/OrderService.ts` | 149 |
+| `CRM_SYNC_ENABLED !== "false"` → skip KeyCRM | `app/api/checkout/route.ts` | 76, 118, 146 |
+| `CRM_SYNC_ENABLED !== "false"` → skip KeyCRM | `services/OrderService.ts` | 271, 325 |
+| `CRM_SYNC_ENABLED === "false"` → skip pending | `services/KeyCRMService.ts` | 649 |
+| `CRM_SYNC_ENABLED === "false"` → block retry | `app/api/admin/orders/[id]/retry-sync/route.ts` | 13 |
+| `KEYCRM_STATUS_SYNC_ENABLED === "false"` → skip | `app/api/cron/keycrm-status-sync/route.ts` | 20 |
+| `NEXT_PUBLIC_APP_ENV === "staging"` → banner | `components/StagingBanner.tsx` | 2 |
+| `NEXT_PUBLIC_APP_ENV === "staging"` → noindex | `app/layout.tsx` | robots meta |
+| `NEXT_PUBLIC_APP_ENV === "staging"` → no analytics | `app/layout.tsx` | GA + Clarity |
+
+### Створення staging
+
+Див. STAGING.md → "Як створити Staging на Railway"
+
+### Git workflow
+
+```
+main ────────── production (auto-deploy)
+  └── feature/* ── staging (manual branch switch in Railway)
+```

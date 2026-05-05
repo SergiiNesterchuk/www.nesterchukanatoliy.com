@@ -1,3 +1,4 @@
+import { StagingBanner } from "@/components/StagingBanner";
 import Link from "next/link";
 import {
   LayoutDashboard,
@@ -38,7 +39,9 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <StagingBanner />
+      <div className="flex flex-1">
       {/* Desktop Sidebar */}
       <aside className="w-64 bg-white border-r hidden md:flex flex-col flex-shrink-0">
         <div className="p-4 border-b">
@@ -83,6 +86,7 @@ export default function AdminLayout({
         <main className="flex-1 overflow-auto">
           <div className="p-4 md:p-6 max-w-6xl">{children}</div>
         </main>
+      </div>
       </div>
     </div>
   );

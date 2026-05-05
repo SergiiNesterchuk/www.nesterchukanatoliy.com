@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { inter } from "@/lib/fonts";
 import { SITE_NAME, SITE_URL, SITE_DESCRIPTION } from "@/shared/constants";
+import { StagingBanner } from "@/components/StagingBanner";
 import "./globals.css";
+
+const isStaging = process.env.NEXT_PUBLIC_APP_ENV === "staging";
 
 export const metadata: Metadata = {
   title: {
@@ -25,10 +28,9 @@ export const metadata: Metadata = {
     locale: "uk_UA",
     siteName: SITE_NAME,
   },
-  robots: {
-    index: true,
-    follow: true,
-  },
+  robots: process.env.NEXT_PUBLIC_APP_ENV === "staging"
+    ? { index: false, follow: false }
+    : { index: true, follow: true },
 };
 
 export default function RootLayout({
@@ -39,22 +41,27 @@ export default function RootLayout({
   return (
     <html lang="uk" className={`${inter.variable} h-full`}>
       <body className="min-h-full flex flex-col font-sans">
+        <StagingBanner />
         {children}
-        <Script
-          id="clarity-tag"
-          src="https://www.clarity.ms/tag/whdthaxfvc"
-          strategy="afterInteractive"
-        />
-        <Script id="clarity-init" strategy="afterInteractive">
-          {`window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments)};`}
-        </Script>
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-Q96TP2EW2C"
-          strategy="afterInteractive"
-        />
-        <Script id="ga-init" strategy="afterInteractive">
-          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Q96TP2EW2C',{page_path:window.location.pathname});`}
-        </Script>
+        {!isStaging && (
+          <>
+            <Script
+              id="clarity-tag"
+              src="https://www.clarity.ms/tag/whdthaxfvc"
+              strategy="afterInteractive"
+            />
+            <Script id="clarity-init" strategy="afterInteractive">
+              {`window.clarity=window.clarity||function(){(window.clarity.q=window.clarity.q||[]).push(arguments)};`}
+            </Script>
+            <Script
+              src="https://www.googletagmanager.com/gtag/js?id=G-Q96TP2EW2C"
+              strategy="afterInteractive"
+            />
+            <Script id="ga-init" strategy="afterInteractive">
+              {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-Q96TP2EW2C',{page_path:window.location.pathname});`}
+            </Script>
+          </>
+        )}
       </body>
     </html>
   );

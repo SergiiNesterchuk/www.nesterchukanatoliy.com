@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-05-06 — Staging/Dev Workflow
+
+**Safety commit:** `4c614b5` (перед змінами)
+
+### Що додано
+- **Staging banner** (`components/StagingBanner.tsx`) — жовтий banner "ТЕСТОВИЙ САЙТ — оплати та синхронізація відключені", показується тільки коли `NEXT_PUBLIC_APP_ENV=staging`
+- **Analytics guard** — Google Analytics та Clarity відключаються у staging (`app/layout.tsx`)
+- **SEO noindex** — staging автоматично отримує `noindex, nofollow` robots meta
+- **STAGING.md** — повна документація staging workflow, env variables, git flow, локальна розробка
+- **Cloud.md** — додано секцію 23 "Staging Environments"
+- `.env.example` — додано `APP_ENV`, `NEXT_PUBLIC_APP_ENV`, feature flags з коментарями
+
+### Що вже працювало до цих змін (guards)
+- `PAYMENTS_ENABLED=false` → `OrderService.createPaymentForOrder()` повертає null
+- `CRM_SYNC_ENABLED !== "false"` → checkout (3 місця), OrderService callback (2 місця), processPendingSyncs, retry-sync
+- `KEYCRM_STATUS_SYNC_ENABLED=false` → cron/keycrm-status-sync
+- Production Railway вже мав `PAYMENTS_ENABLED=true` і `CRM_SYNC_ENABLED=true`
+
+### Змінені файли
+| Файл | Зміна |
+|---|---|
+| `app/layout.tsx` | StagingBanner, analytics guard, robots noindex для staging |
+| `app/admin/layout.tsx` | StagingBanner в адмінці |
+| `components/StagingBanner.tsx` | Новий компонент |
+| `.env.example` | APP_ENV, NEXT_PUBLIC_APP_ENV, feature flags |
+| `Cloud.md` | Секція 23 — Staging Environments |
+| `STAGING.md` | Новий файл — повна документація |
+
+### Що потрібно зробити вручну в Railway
+1. Створити staging environment (Dashboard > New Environment > "staging")
+2. Додати PostgreSQL у staging environment
+3. Налаштувати env variables (див. STAGING.md)
+4. Вибрати deploy branch
+5. `railway run npx prisma db push && railway run npx tsx prisma/seed.ts`
+
+### Перевірка production safety
+- Production без `NEXT_PUBLIC_APP_ENV` — banner не показується, analytics працюють, robots index/follow
+- Backward-compatible: всі нові guards мають fallback на production behavior
+
+---
+
 ## 2026-04-30 — Покращення логування webhook + override для status_id 21
 
 ### Що змінено
