@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { formatPrice } from "@/shared/money";
 import { ORDER_STATUSES, PAYMENT_STATUSES, CRM_SYNC_STATUSES } from "@/shared/constants";
 
+const IS_STAGING = process.env.NEXT_PUBLIC_APP_ENV === "staging";
+
 interface OrderDetail {
   id: string;
   orderNumber: string;
@@ -135,7 +137,7 @@ export default function AdminOrderDetailPage() {
       </div>
 
       {/* Mock Payment (staging only) */}
-      {process.env.NEXT_PUBLIC_APP_ENV === "staging" && (
+      {IS_STAGING && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
           <h2 className="font-semibold text-amber-800 mb-2">Тестова оплата</h2>
           <div className="flex flex-wrap gap-2">
