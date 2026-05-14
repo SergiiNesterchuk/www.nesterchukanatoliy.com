@@ -26,7 +26,7 @@ The old system is a **separate Python FastAPI microservice** that handles "Depos
 ```
 Horoshop creates order in KeyCRM
     ↓
-User sees "Оплата при отриманні з передплатою 300 грн"
+User sees "Оплата при отриманні з авансом 300 грн"
     ↓
 Horoshop redirects to → GET /deposit/start?order_id=HS123&customer_name=...
     ↓
@@ -47,7 +47,7 @@ If APPROVED:
   → Find order in KeyCRM (10 retries × 3 sec)
   → Cancel placeholder full payment in KeyCRM
   → Create 300 UAH payment in KeyCRM (status: paid)
-  → Append comment: "Передплату 300 грн отримано"
+  → Append comment: "Аванс 300 грн отримано"
   → Telegram: "✅ Deposit paid"
     ↓
 If REFUND/REVERSE:
@@ -150,8 +150,8 @@ The new prepayment does NOT need a separate backend. All components already exis
 Add a third PaymentMethod:
 ```
 key: "cod_with_prepayment"
-title: "Накладений платіж з передплатою"
-description: "Передплата {amount} грн, решта — при отриманні"
+title: "Накладений платіж з авансом"
+description: "Аванс {amount} грн, решта — при отриманні"
 requiresOnlinePayment: true  (WayForPay invoice for prepayment amount)
 ```
 
@@ -164,7 +164,7 @@ Store as Setting: `prepayment_amount = 20000` (200 UAH in kopiyky, editable in a
 ## 8. Proposed Flow for COD Prepayment
 
 ```
-User selects "Накладений платіж з передплатою 200 грн"
+User selects "Накладений платіж з авансом 200 грн"
     ↓
 Checkout creates local Order:
   - paymentMethod: "cod_with_prepayment"
@@ -182,10 +182,10 @@ PaymentEvent created (amount: 200 UAH, type: "prepayment")
     ↓
 KeyCRM sync:
   - Order created with full total
-  - Payment attached: 200 UAH, status: paid, description: "Передплата 200 грн"
-  - Comment: "Передплату 200 грн отримано. Решта при отриманні."
+  - Payment attached: 200 UAH, status: paid, description: "Аванс 200 грн"
+  - Comment: "Аванс 200 грн отримано. Решта при отриманні."
     ↓
-Success page: "Передплату отримано! Решта X грн — при отриманні."
+Success page: "Аванс отримано! Решта X грн — при отриманні."
 ```
 
 ### If payment fails/cancelled:
@@ -207,7 +207,7 @@ Success page: "Передплату отримано! Решта X грн — п
 | payments[0].method | `card` | `cash_on_delivery` | `WayForPay` |
 | payments[0].amount | Full total | Full total | **200 UAH** (prepayment only) |
 | payments[0].status | `paid` | `not_paid` | `paid` |
-| payments[0].description | WayForPay ID | Накладений платіж | "Передплата 200 грн" |
+| payments[0].description | WayForPay ID | Накладений платіж | "Аванс 200 грн" |
 | payments[1] (optional) | — | — | `cash_on_delivery`, amount: rest, status: `not_paid` |
 | manager_comment | Order + delivery info | Same | Same + "Решта {X} грн при отриманні" |
 
@@ -240,7 +240,7 @@ Success page: "Передплату отримано! Решта X грн — п
 - [ ] Checkout API: for `cod_with_prepayment` create WayForPay session with prepayment amount (not total)
 - [ ] WayForPay callback: validate amount === order.prepaymentAmount
 - [ ] On success: `prepaymentStatus: "paid"`, `paymentStatus: "prepayment_paid"`
-- [ ] Success page: "Передплату {X} грн отримано. Решта {Y} грн при отриманні."
+- [ ] Success page: "Аванс {X} грн отримано. Решта {Y} грн при отриманні."
 
 ### Phase 3: KeyCRM Sync
 - [ ] KeyCRMMapper: for `cod_with_prepayment` create 2 payment records:

@@ -312,7 +312,7 @@ No separate event routing. Every webhook triggers the same full sync. This preve
 
 **Refund labels:** If payment was previously `paid`/`partial_paid` and a refund comes:
 - Shows "Кошти повернено" (not "Помилка оплати")
-- If prepayment was received then refunded: "Передплату скасовано / кошти повернено"
+- If prepayment was received then refunded: "Аванс скасовано / кошти повернено"
 - "Оплата не пройшла" used ONLY when card was declined before any charge
 
 ### Backward-compatible aliases
@@ -361,7 +361,7 @@ POST /api/cron/keycrm-status-sync?secret=CRON_SECRET
 3. **Unsupported event:** Send arbitrary JSON to webhook URL → returns 200, logged as `unsupported` in IntegrationLog, no 500
 4. **TTN test:** Add tracking number in KeyCRM → webhook triggers → customer account shows ТТН block + history entry
 5. **Refund test:** Refund a previously paid order → customer sees "Кошти повернено" (not "Помилка оплати")
-6. **Prepayment refund:** Refund a COD prepayment that was received → shows "Передплату скасовано / кошти повернено" (not "Передплата не пройшла")
+6. **Prepayment refund:** Refund a COD prepayment that was received → shows "Аванс скасовано / кошти повернено" (not "Аванс не пройшов")
 7. **Cron test:** `curl -X POST "https://SITE_URL/api/cron/keycrm-status-sync?secret=CRON_SECRET"` → returns `{processed, updated, errors}`
 8. **Verify logs:** Railway logs should show `event: "order.status_changed"` (not `eventType: "unknown"`)
 
@@ -469,13 +469,13 @@ railway run pg_dump $DATABASE_URL > backup.sql
 **Сайт використовує:**
 - **ID 3** = Оплата на рахунок (bank_transfer) — менеджер надсилає реквізити
 - **ID 8** = 100% онлайн-оплата WayForPay (full_payment)
-- **ID 12** = Передплата 200 грн WayForPay (cod_prepayment)
+- **ID 12** = Аванс 200 грн WayForPay (cod_prepayment)
 - **ID 17** = Накладений платіж з Нової Пошти (COD решта)
 
 Env variables:
 - `KEYCRM_PAYMENT_METHOD_BANK_TRANSFER_ID=3` (оплата на рахунок)
 - `KEYCRM_PAYMENT_METHOD_CARD_ID=8` (100% оплата)
-- `KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID=12` (передплата 200 грн)
+- `KEYCRM_PAYMENT_METHOD_PREPAYMENT_ID=12` (аванс 200 грн)
 - `KEYCRM_PAYMENT_METHOD_COD_ID=17` (накладений платіж НП)
 
 ### Як отримати актуальний список методів
@@ -528,18 +528,18 @@ Authorization: Bearer {KEYCRM_API_KEY}
 { "payment_method_id": 8, "amount": 280, "status": "paid", "description": "WayForPay: txId123. Замовлення сайту: K-5017" }
 ```
 
-**C. COD передплата 200 грн — unpaid:**
+**C. COD аванс 200 грн — unpaid:**
 ```json
 [
-  { "payment_method_id": 12, "amount": 200, "status": "not_paid", "description": "WayForPay передплата. Замовлення сайту: K-5018" },
+  { "payment_method_id": 12, "amount": 200, "status": "not_paid", "description": "WayForPay аванс. Замовлення сайту: K-5018" },
   { "payment_method_id": 17, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
 ]
 ```
 
-**D. COD передплата 200 грн — paid:**
+**D. COD аванс 200 грн — paid:**
 ```json
 [
-  { "payment_method_id": 12, "amount": 200, "status": "paid", "description": "WayForPay передплата 200 грн. WayForPay: txId456. Замовлення сайту: K-5018" },
+  { "payment_method_id": 12, "amount": 200, "status": "paid", "description": "WayForPay аванс 200 грн. WayForPay: txId456. Замовлення сайту: K-5018" },
   { "payment_method_id": 17, "amount": 80, "status": "not_paid", "description": "Решта 80 грн при отриманні. Замовлення сайту: K-5018" }
 ]
 ```
@@ -602,12 +602,12 @@ KeyCRM sub-statuses are stored in `keycrmStatusName` for diagnostics but never s
 | Value | Customer label | Notes |
 |-------|---------------|-------|
 | `pending` | Очікує оплати | |
-| `awaiting_prepayment` | Очікує передплати | COD flow |
-| `partial_paid` | Передплата отримана | COD prepayment 200 UAH |
+| `awaiting_prepayment` | Очікує авансу | COD flow |
+| `partial_paid` | Аванс отримано | COD prepayment 200 UAH |
 | `cod_pending` | Оплата при отриманні | |
 | `paid` | Оплачено | |
 | `failed` | Оплата не пройшла | Payment declined BEFORE charge |
-| `prepayment_failed` | Передплата не пройшла | COD prepayment declined |
+| `prepayment_failed` | Аванс не пройшов | COD prepayment declined |
 | `refunded` | Кошти повернено | Refund AFTER successful charge |
 | `cancelled` | Платіж скасовано | Payment cancelled |
 
