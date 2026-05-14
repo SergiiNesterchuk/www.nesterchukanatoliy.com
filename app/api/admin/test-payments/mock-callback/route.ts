@@ -44,7 +44,7 @@ export const POST = adminGuard(async (req: NextRequest) => {
       status: isCodPrepayment ? "new" : "paid",
     });
     await prisma.orderStatusHistory.create({
-      data: { orderId, source: "payment", oldStatus: order.paymentStatus, newStatus, message: `[MOCK] ${isCodPrepayment ? "Передплату отримано" : "Оплату отримано"}` },
+      data: { orderId, source: "payment", oldStatus: order.paymentStatus, newStatus, message: `[MOCK] ${isCodPrepayment ? "Аванс отримано" : "Оплату отримано"}` },
     }).catch(() => {});
 
     logger.info("Mock success applied", { orderId, orderNumber: order.orderNumber, newStatus });
@@ -59,7 +59,7 @@ export const POST = adminGuard(async (req: NextRequest) => {
     });
     await OrderRepository.updatePaymentStatus(orderId, { paymentStatus: failStatus });
     await prisma.orderStatusHistory.create({
-      data: { orderId, source: "payment", oldStatus: order.paymentStatus, newStatus: failStatus, message: `[MOCK] ${isCodPrepayment ? "Передплата не пройшла" : "Оплата не пройшла"}` },
+      data: { orderId, source: "payment", oldStatus: order.paymentStatus, newStatus: failStatus, message: `[MOCK] ${isCodPrepayment ? "Аванс не пройшов" : "Оплата не пройшла"}` },
     }).catch(() => {});
 
     logger.info("Mock failure applied", { orderId, orderNumber: order.orderNumber, failStatus });

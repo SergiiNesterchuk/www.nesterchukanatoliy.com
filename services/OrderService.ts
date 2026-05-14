@@ -159,7 +159,7 @@ export class OrderService {
     const isCodPrepayment = !!overrideAmount && overrideAmount < order.total;
 
     const description = isCodPrepayment
-      ? `Передплата ${payAmount / 100} грн за замовлення ${order.orderNumber}`
+      ? `Аванс ${payAmount / 100} грн за замовлення ${order.orderNumber}`
       : `Замовлення ${order.orderNumber}`;
 
     const provider = getPaymentProvider("wayforpay");
@@ -185,7 +185,7 @@ export class OrderService {
       customerEmail: order.customerEmail || undefined,
       // For prepayment: single line item with prepayment amount
       items: isCodPrepayment
-        ? [{ name: `Передплата за замовлення ${order.orderNumber}`, quantity: 1, price: payAmount }]
+        ? [{ name: `Аванс за замовлення ${order.orderNumber}`, quantity: 1, price: payAmount }]
         : order.items.map((item) => ({ name: item.name, quantity: item.quantity, price: item.price })),
     });
 
@@ -243,7 +243,7 @@ export class OrderService {
 
     // Status history
     const statusMessage = isCodPrepayment
-      ? `[MOCK] Передплату ${(amount / 100).toFixed(0)} грн отримано`
+      ? `[MOCK] Аванс ${(amount / 100).toFixed(0)} грн отримано`
       : "[MOCK] Оплату отримано";
     await prisma.orderStatusHistory.create({
       data: { orderId: order.id, source: "payment", oldStatus: order.paymentStatus, newStatus: newPaymentStatus, message: statusMessage },
@@ -314,7 +314,7 @@ export class OrderService {
       const isCodPrepayment = order.paymentPurpose === "cod_prepayment" || order.paymentMethod.includes("cod");
       const newPaymentStatus = isCodPrepayment ? "partial_paid" : "paid";
       const statusMessage = isCodPrepayment
-        ? `Передплату ${(result.amount / 100).toFixed(0)} грн отримано`
+        ? `Аванс ${(result.amount / 100).toFixed(0)} грн отримано`
         : "Оплату отримано";
 
       await OrderRepository.updatePaymentStatus(order.id, {
@@ -368,11 +368,11 @@ export class OrderService {
       if (wasPreviouslyCharged) {
         // Refund/cancellation AFTER money was charged
         failStatus = "refunded";
-        failMessage = isCodPrepayment ? "Передплату скасовано / кошти повернено" : "Кошти повернено";
+        failMessage = isCodPrepayment ? "Аванс скасовано / кошти повернено" : "Кошти повернено";
       } else {
         // Declined BEFORE charge
         failStatus = isCodPrepayment ? "prepayment_failed" : "failed";
-        failMessage = isCodPrepayment ? "Передплата не пройшла" : "Оплата не пройшла";
+        failMessage = isCodPrepayment ? "Аванс не пройшов" : "Оплата не пройшла";
       }
 
       await OrderRepository.updatePaymentStatus(order.id, { paymentStatus: failStatus });

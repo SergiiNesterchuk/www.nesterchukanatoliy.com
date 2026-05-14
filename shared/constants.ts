@@ -49,12 +49,12 @@ export const ORDER_STATUSES = {
 
 export const PAYMENT_STATUSES = {
   pending: "Очікує оплати",
-  awaiting_prepayment: "Очікує передплати",
-  partial_paid: "Передплата отримана",
+  awaiting_prepayment: "Очікує авансу",
+  partial_paid: "Аванс отримано",
   cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
   failed: "Оплата не пройшла",
-  prepayment_failed: "Передплата не пройшла",
+  prepayment_failed: "Аванс не пройшов",
   refunded: "Кошти повернено",
   cancelled: "Платіж скасовано",
 } as const;

@@ -484,7 +484,7 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
                   {isCod && selectedPaymentMethod === pm.key && total > 0 && (
                     <div className="mt-2 bg-orange-50 rounded-lg p-2.5 text-xs space-y-1">
                       <div className="flex justify-between"><span>Сума замовлення:</span><span className="font-medium">{formatPrice(total)}</span></div>
-                      <div className="flex justify-between text-green-700"><span>Передплата зараз:</span><span className="font-medium">{formatPrice(prepay)}</span></div>
+                      <div className="flex justify-between text-green-700"><span>Аванс зараз:</span><span className="font-medium">{formatPrice(prepay)}</span></div>
                       {remaining > 0 && <div className="flex justify-between text-orange-700"><span>При отриманні:</span><span className="font-medium">{formatPrice(remaining)}</span></div>}
                     </div>
                   )}

@@ -7,7 +7,7 @@ export function ProductDeliveryInfo() {
       </div>
       <div className="bg-gray-50 rounded-lg p-4">
         <h3 className="font-semibold text-gray-900 mb-2">💳 Оплата</h3>
-        <p className="text-gray-600">Карткою онлайн або накладений платіж із передплатою.</p>
+        <p className="text-gray-600">Карткою онлайн або накладений платіж з авансом.</p>
       </div>
     </div>
   );

@@ -54,7 +54,7 @@ export class EmailService {
     } else if (order.paymentStatus === "partial_paid" && order.prepaymentAmount) {
       const prepay = order.prepaymentAmount / 100;
       const remaining = (order.total - order.prepaymentAmount) / 100;
-      paymentText = `Передплата ${prepay} грн отримана. Решта до оплати при отриманні: ${remaining} грн`;
+      paymentText = `Аванс ${prepay} грн отримано. Решта до оплати при отриманні: ${remaining} грн`;
     } else {
       paymentText = "Очікує оплати";
     }

@@ -11,7 +11,7 @@ const SECTIONS = [
     { key: "product_page_layout", label: "Стиль сторінки", type: "select", default: "layout_2", options: ["layout_1", "layout_2", "layout_3", "layout_4", "layout_5"],
       optionLabels: { layout_1: "Класичний", layout_2: "Sticky галерея", layout_3: "Лендінг", layout_4: "Компактний", layout_5: "Мобільний accordion" } },
     { key: "product_delivery_text", label: "Текст доставки (HTML)", type: "html", default: "<p>Доставка <strong>Новою Поштою</strong> по всій Україні. Термін: 1-3 робочих дні.</p>" },
-    { key: "product_payment_text", label: "Текст оплати (HTML)", type: "html", default: "<p>Оплата карткою онлайн або накладений платіж з передплатою.</p>" },
+    { key: "product_payment_text", label: "Текст оплати (HTML)", type: "html", default: "<p>Оплата карткою онлайн або накладений платіж з авансом.</p>" },
   ]},
   { title: "Верхня панель сайту", hint: "Темна смужка зверху сайту з телефоном і соцмережами (desktop). Соцмережі беруться з секції Соцмережі нижче.", items: [
     { key: "topbar_enabled", label: "Показувати верхню панель", type: "select", default: "true", options: ["true", "false"] },

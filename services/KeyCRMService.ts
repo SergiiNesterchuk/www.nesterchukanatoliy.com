@@ -238,7 +238,7 @@ export class KeyCRMService {
     const txDescription = order.externalPaymentId
       ? `WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
       : isCodPrepayment
-        ? `WayForPay передплата. Замовлення сайту: ${orderNum}`
+        ? `WayForPay аванс. Замовлення сайту: ${orderNum}`
         : `Оплата карткою. Замовлення сайту: ${orderNum}`;
 
     logger.info("syncPaymentToKeyCRM: payment details", {
@@ -418,8 +418,8 @@ export class KeyCRMService {
               payment_method_id: prepaymentMethodId,
               status: "paid",
               description: order.externalPaymentId
-                ? `WayForPay передплата ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
-                : `WayForPay передплата ${prepaymentUAH} грн. Замовлення сайту: ${orderNum}`,
+                ? `WayForPay аванс ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+                : `WayForPay аванс ${prepaymentUAH} грн. Замовлення сайту: ${orderNum}`,
             },
             "order", orderId
           );
@@ -439,8 +439,8 @@ export class KeyCRMService {
             amount: prepaymentUAH,
             status: prepaymentPaid ? "paid" : "not_paid",
             description: order.externalPaymentId
-              ? `WayForPay передплата ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
-              : `WayForPay передплата. Замовлення сайту: ${orderNum}`,
+              ? `WayForPay аванс ${prepaymentUAH} грн. WayForPay: ${order.externalPaymentId}. Замовлення сайту: ${orderNum}`
+              : `WayForPay аванс. Замовлення сайту: ${orderNum}`,
           },
           "order", orderId
         );
@@ -531,7 +531,7 @@ export class KeyCRMService {
     const refundAmount = isCodPrepayment && order.prepaymentAmount
       ? order.prepaymentAmount
       : order.total;
-    const refundLabel = isCodPrepayment ? "Передплата" : "Оплата";
+    const refundLabel = isCodPrepayment ? "Аванс" : "Оплата";
 
     try {
       let refundSynced = false;

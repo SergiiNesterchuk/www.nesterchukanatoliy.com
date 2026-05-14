@@ -109,7 +109,7 @@ export default async function CheckoutSuccessPage({
     : isBankTransfer
       ? "Замовлення прийнято!"
       : codPrepaymentConfirmed
-        ? "Передплату отримано!"
+        ? "Аванс отримано!"
         : isCod
           ? "Замовлення оформлено!"
           : "Замовлення прийнято!";

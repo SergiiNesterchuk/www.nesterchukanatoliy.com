@@ -233,7 +233,7 @@ async function ProductView({ slug }: { slug: string }) {
 
   // Fallback defaults if settings not configured yet
   if (!deliveryText) deliveryText = "<p>Доставка <strong>Новою Поштою</strong> по всій Україні. Термін: 1-3 робочих дні.</p>";
-  if (!paymentText) paymentText = "<p>Оплата карткою онлайн або накладений платіж з передплатою.</p>";
+  if (!paymentText) paymentText = "<p>Оплата карткою онлайн або накладений платіж з авансом.</p>";
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const layouts: Record<string, React.FC<any>> = {

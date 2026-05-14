@@ -76,7 +76,7 @@ function buildDeliveryComment(order: LocalOrder): string {
   if (order.prepaymentAmount && order.prepaymentAmount > 0) {
     const prepUAH = order.prepaymentAmount / 100;
     const remainUAH = (order.total - order.prepaymentAmount) / 100;
-    parts.push(`Передплата: ${prepUAH} грн (WayForPay)`);
+    parts.push(`Аванс: ${prepUAH} грн (WayForPay)`);
     if (remainUAH > 0) parts.push(`Решта при отриманні: ${remainUAH} грн`);
   }
 
@@ -203,7 +203,7 @@ export class KeyCRMMapper {
           payment_method_id: prepaymentMethodId,
           amount: prepaymentUAH,
           status: "paid",
-          description: `WayForPay передплата ${prepaymentUAH} грн${order.externalPaymentId ? `. WayForPay: ${order.externalPaymentId}` : ""}. Замовлення сайту: ${orderNum}`,
+          description: `WayForPay аванс ${prepaymentUAH} грн${order.externalPaymentId ? `. WayForPay: ${order.externalPaymentId}` : ""}. Замовлення сайту: ${orderNum}`,
         },
       ];
 
@@ -225,7 +225,7 @@ export class KeyCRMMapper {
           payment_method_id: prepaymentMethodId,
           amount: prepaymentUAH,
           status: "not_paid",
-          description: `WayForPay передплата. Замовлення сайту: ${orderNum}. Очікує оплати.`,
+          description: `WayForPay аванс. Замовлення сайту: ${orderNum}. Очікує оплати.`,
         },
       ];
 

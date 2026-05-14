@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
 
       if (estimatedTotal <= COD_PREPAYMENT_AMOUNT) {
         console.log("[Checkout] COD prepayment rejected: totalAmount=%d, paymentMethod=%s, reason=total <= prepayment threshold", estimatedTotal, validated.paymentMethod);
-        return errorResponse(new Error("Накладений платіж з передплатою доступний для замовлень понад 200 грн."));
+        return errorResponse(new Error("Накладений платіж з авансом доступний для замовлень понад 200 грн."));
       }
     }
 
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       });
 
       await prisma.orderStatusHistory.create({
-        data: { orderId: order.id, source: "local", newStatus: "awaiting_prepayment", message: `Очікує передплати ${prepaymentAmount / 100} грн` },
+        data: { orderId: order.id, source: "local", newStatus: "awaiting_prepayment", message: `Очікує авансу ${prepaymentAmount / 100} грн` },
       }).catch(() => {});
 
       // Create WayForPay session for prepayment amount only

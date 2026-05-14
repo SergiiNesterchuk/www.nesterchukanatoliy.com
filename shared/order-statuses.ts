@@ -26,12 +26,12 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 
 export const PAYMENT_STATUS_LABELS: Record<string, string> = {
   pending: "Очікує оплати",
-  awaiting_prepayment: "Очікує передплати",
-  partial_paid: "Передплата отримана",
+  awaiting_prepayment: "Очікує авансу",
+  partial_paid: "Аванс отримано",
   cod_pending: "Оплата при отриманні",
   paid: "Оплачено",
   failed: "Оплата не пройшла",
-  prepayment_failed: "Передплата не пройшла",
+  prepayment_failed: "Аванс не пройшов",
   refunded: "Кошти повернено",
   cancelled: "Платіж скасовано",
 };
@@ -90,9 +90,9 @@ export function formatHistoryMessage(entry: {
 
 const PAYMENT_HISTORY_LABELS: Record<string, string> = {
   paid: "Замовлення оплачено",
-  partial_paid: "Передплату отримано",
+  partial_paid: "Аванс отримано",
   failed: "Оплата не пройшла",
-  prepayment_failed: "Передплата не пройшла",
+  prepayment_failed: "Аванс не пройшов",
   refunded: "Кошти повернено",
   cancelled: "Платіж скасовано",
   cod_pending: "Оплата при отриманні",

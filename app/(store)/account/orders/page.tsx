@@ -15,9 +15,9 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const PAYMENT_LABELS: Record<string, string> = {
-  pending: "Очікує", cod_pending: "При отриманні", awaiting_prepayment: "Очікує передплати",
-  partial_paid: "Передплата", paid: "Оплачено",
-  failed: "Не пройшла", prepayment_failed: "Передплата не пройшла",
+  pending: "Очікує", cod_pending: "При отриманні", awaiting_prepayment: "Очікує авансу",
+  partial_paid: "Аванс", paid: "Оплачено",
+  failed: "Не пройшла", prepayment_failed: "Аванс не пройшов",
   refunded: "Повернено", cancelled: "Скасовано",
 };
 

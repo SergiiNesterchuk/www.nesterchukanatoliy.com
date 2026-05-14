@@ -39,10 +39,10 @@ const ORDER_LABELS: Record<string, string> = {
 
 // -- Payment statuses (clear refund vs failed) --
 const PAYMENT_LABELS: Record<string, string> = {
-  pending: "Очікує оплати", awaiting_prepayment: "Очікує передплати",
-  partial_paid: "Передплата отримана", cod_pending: "Оплата при отриманні",
+  pending: "Очікує оплати", awaiting_prepayment: "Очікує авансу",
+  partial_paid: "Аванс отримано", cod_pending: "Оплата при отриманні",
   paid: "Оплачено", failed: "Оплата не пройшла",
-  prepayment_failed: "Передплата не пройшла",
+  prepayment_failed: "Аванс не пройшов",
   refunded: "Кошти повернено", cancelled: "Платіж скасовано",
 };
 
@@ -199,7 +199,7 @@ export default function OrderDetailPage() {
         {/* Prepayment info */}
         {prepayUAH > 0 && (
           <div className="mt-4 bg-orange-50 rounded-lg p-3 text-sm text-orange-700">
-            Передплата {prepayUAH} грн отримана. Решта при отриманні: {remainingUAH} грн
+            Аванс {prepayUAH} грн отримано. Решта при отриманні: {remainingUAH} грн
           </div>
         )}
       </div>
