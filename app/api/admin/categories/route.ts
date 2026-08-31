@@ -3,6 +3,7 @@ import { prisma } from "@/shared/db";
 import { adminGuard } from "@/shared/admin-auth";
 import { categorySchema } from "@/validators/admin.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
+import { isAutoSlug, resolveSlugForCreate } from "@/shared/slug-namespace";
 
 export const GET = adminGuard(async () => {
   try {
@@ -21,12 +22,12 @@ export const POST = adminGuard(async (req: NextRequest) => {
     const body = await req.json();
     const data = categorySchema.parse(body);
 
-    const existing = await prisma.category.findFirst({ where: { slug: data.slug } });
-    if (existing) return errorResponse(new Error("Slug вже існує"));
+    const slug = await resolveSlugForCreate(data.slug, isAutoSlug(body));
 
     const category = await prisma.category.create({
       data: {
         ...data,
+        slug,
         description: data.description || null,
         imageUrl: data.imageUrl || null,
         metaTitle: data.metaTitle || null,

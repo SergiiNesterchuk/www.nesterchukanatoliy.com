@@ -188,6 +188,9 @@ export function ProductEditForm({ product, categories, isNew, images: initialIma
               }}
               required
             />
+            {/* Lets the server shift an auto-filled slug to hrusha-2 instead of erroring,
+                while a hand-typed slug is never rewritten silently. */}
+            <input type="hidden" name="slugAuto" value={String(isNew && !slugManual)} />
             {isNew && slugManual && (
               <button
                 type="button"

@@ -4,6 +4,8 @@ import { adminGuard } from "@/shared/admin-auth";
 import { productUpdateSchema } from "@/validators/admin.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
 import { deleteFile } from "@/shared/storage";
+import { assertSlugAvailable } from "@/shared/slug-namespace";
+import { ValidationError } from "@/shared/errors";
 
 export const GET = adminGuard(async (
   _req: NextRequest,
@@ -43,16 +45,13 @@ export const PUT = adminGuard(async (
     const data = productUpdateSchema.parse(body);
 
     if (data.slug) {
-      const conflict = await prisma.product.findFirst({
-        where: { slug: data.slug, NOT: { id } },
-      });
-      if (conflict) return errorResponse(new Error("Slug вже існує"));
+      await assertSlugAvailable(data.slug, { type: "product", id });
     }
     if (data.sku) {
       const conflict = await prisma.product.findFirst({
         where: { sku: data.sku, NOT: { id } },
       });
-      if (conflict) return errorResponse(new Error("SKU вже існує"));
+      if (conflict) throw new ValidationError("SKU вже існує");
     }
 
     const updateData: Record<string, unknown> = {};

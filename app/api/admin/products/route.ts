@@ -3,6 +3,8 @@ import { prisma } from "@/shared/db";
 import { adminGuard } from "@/shared/admin-auth";
 import { productCreateSchema } from "@/validators/admin.schema";
 import { successResponse, errorResponse } from "@/shared/api-response";
+import { isAutoSlug, resolveSlugForCreate } from "@/shared/slug-namespace";
+import { ValidationError } from "@/shared/errors";
 
 export const GET = adminGuard(async (req: NextRequest) => {
   try {
@@ -30,18 +32,15 @@ export const POST = adminGuard(async (req: NextRequest) => {
 
     const data = productCreateSchema.parse(body);
 
-    const existing = await prisma.product.findFirst({
-      where: { OR: [{ slug: data.slug }, { sku: data.sku }] },
-    });
-    if (existing) {
-      return errorResponse(
-        new Error(existing.slug === data.slug ? "Slug вже існує" : "SKU вже існує")
-      );
-    }
+    const skuTaken = await prisma.product.findFirst({ where: { sku: data.sku } });
+    if (skuTaken) throw new ValidationError("SKU вже існує");
+
+    const slug = await resolveSlugForCreate(data.slug, isAutoSlug(body));
 
     const product = await prisma.product.create({
       data: {
         ...data,
+        slug,
         shortDescription: data.shortDescription || null,
         description: data.description || null,
         compareAtPrice: data.compareAtPrice || null,
