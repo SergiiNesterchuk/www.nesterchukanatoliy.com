@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { useCartStore } from "@/hooks/useCart";
 import { formatPrice } from "@/shared/money";
 import { normalizePhoneUA, isValidPhoneUA, formatPhoneUA } from "@/shared/phone";
-import { DELIVERY_METHODS, COD_PREPAYMENT_AMOUNT, MIN_ORDER_AMOUNT } from "@/shared/constants";
+import { DELIVERY_METHODS, COD_PREPAYMENT_AMOUNT, MIN_ORDER_AMOUNT, MAX_CART_QUANTITY } from "@/shared/constants";
 import { Spinner } from "@/components/ui/Spinner";
 import { MapPin, Search } from "lucide-react";
 
@@ -47,23 +47,51 @@ interface PaymentMethodOption {
   requiresOnlinePayment: boolean;
 }
 
-export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }) {
+export function CheckoutForm() {
   const { items, totalPrice, clearCart, updateQuantity, removeItem } = useCartStore();
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
 
-  // Cart is rehydrated from localStorage on the client only — same guard as CartIcon
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-  const belowMinimum = mounted && totalPrice() < MIN_ORDER_AMOUNT;
+  // Safe without a hydration guard: this only renders past the `items.length === 0`
+  // early return, and zustand persist rehydrates synchronously before the first client render.
+  const belowMinimum = totalPrice() < MIN_ORDER_AMOUNT;
+
+  // Stock kept in localStorage can be stale — refresh it once from the server.
+  // Fails open: OrderService remains the authoritative check.
+  const [stockMap, setStockMap] = useState<Record<string, number | null>>({});
+  const [stockNotice, setStockNotice] = useState("");
+  useEffect(() => {
+    const { items: current, updateQuantity: update } = useCartStore.getState();
+    if (current.length === 0) return;
+    fetch("/api/cart/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: current.map((i) => ({ productId: i.productId, quantity: i.quantity })) }),
+    })
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.success || !d.data) return;
+        const map: Record<string, number | null> = {};
+        for (const row of d.data.items) {
+          map[row.productId] = row.stockAvailable;
+          // Clamp stale quantities down to what is actually available
+          if (row.quantityAdjusted && row.quantity > 0) update(row.productId, row.quantity);
+        }
+        setStockMap(map);
+        setStockNotice((d.data.errors as string[]).join(" "));
+      })
+      .catch(() => {});
+  }, []);
+
+  const maxQtyFor = (item: { productId: string; maxQuantity: number | null }) =>
+    stockMap[item.productId] ?? item.maxQuantity ?? MAX_CART_QUANTITY;
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [deliveryMethod, setDeliveryMethod] = useState("nova_poshta_branch");
   const [comment, setComment] = useState("");
-  const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   // Payment methods from admin
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodOption[]>([]);
@@ -227,12 +255,15 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
     const e: Record<string, string> = {};
     if (items.length === 0) e.items = "Кошик порожній";
     else if (totalPrice() < MIN_ORDER_AMOUNT) e.items = `Мінімальна сума замовлення — ${MIN_ORDER_AMOUNT / 100} грн`;
+    else {
+      const over = items.find((i) => i.quantity > maxQtyFor(i));
+      if (over) e.items = `${over.name}: доступно лише ${maxQtyFor(over)} шт.`;
+    }
     if (!customerName.trim() || customerName.length < 2) e.customerName = "Вкажіть ім'я";
     if (!isValidPhoneUA(customerPhone)) e.customerPhone = "Невірний номер телефону";
     if (!selectedCity) e.city = "Оберіть місто";
     if (deliveryMethod === "nova_poshta_branch" && !selectedWarehouse) e.warehouse = "Оберіть відділення";
     if (deliveryMethod === "nova_poshta_courier" && !courierAddress.trim()) e.courierAddress = "Вкажіть адресу";
-    if (requireTerms && !agreedToTerms) e.agreedToTerms = "Потрібна згода з умовами";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -321,6 +352,7 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
           {items.map((item) => {
             const isLastItem = items.length === 1 && item.quantity === 1;
+            const maxQty = maxQtyFor(item);
 
             const handleMinus = () => {
               if (isLastItem) {
@@ -353,14 +385,18 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
                       className="text-gray-400 hover:text-red-500 text-lg leading-none" title="Видалити">×</button>
                   </div>
                 </div>
-                {/* Row 2: quantity controls */}
+                {/* Row 2: quantity controls — capped at available stock (same source as CartItem) */}
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={handleMinus}
                     className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">−</button>
                   <span className="w-8 text-center font-medium tabular-nums">{item.quantity}</span>
                   <button type="button" onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                    className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100">+</button>
+                    disabled={item.quantity >= maxQty}
+                    className="w-7 h-7 rounded border border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent">+</button>
                   <span className="text-xs text-gray-400 ml-2">× {formatPrice(item.price)}</span>
+                  {item.quantity >= maxQty && (
+                    <span className="text-xs text-gray-500 ml-2">макс. {maxQty} шт.</span>
+                  )}
                 </div>
               </div>
             );
@@ -368,6 +404,11 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
           <div className="border-t pt-3 flex justify-between font-semibold">
             <span>Разом</span><span>{formatPrice(totalPrice())}</span>
           </div>
+          {(stockNotice || errors.items) && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {errors.items || stockNotice}
+            </p>
+          )}
         </div>
       </section>
 
@@ -506,15 +547,10 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
         <textarea id="comment" value={comment} onChange={(e) => setComment(e.target.value)} rows={3} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-200" placeholder="Додаткові побажання..." />
       </section>
 
-      {requireTerms && (
-        <div>
-          <label className="flex items-start gap-2 cursor-pointer">
-            <input type="checkbox" checked={agreedToTerms} onChange={(e) => { setAgreedToTerms(e.target.checked); setErrors((p) => ({ ...p, agreedToTerms: "" })); }} className="mt-0.5 text-green-600 rounded" />
-            <span className="text-sm text-gray-600">Я погоджуюсь з <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">умовами використання</a></span>
-          </label>
-          {errors.agreedToTerms && <p className="mt-1 text-xs text-red-600">{errors.agreedToTerms}</p>}
-        </div>
-      )}
+      <p className="text-sm text-gray-500">
+        Оформлюючи замовлення, ви погоджуєтесь з{" "}
+        <a href="/umovy-vykorystannia/" target="_blank" className="text-green-600 hover:underline">умовами використання</a>.
+      </p>
 
       {belowMinimum && (
         <p className="text-center text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
