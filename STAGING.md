@@ -7,13 +7,56 @@
 | **URL** | nesterchukanatoliy.com | staging-web-staging-2eaf.up.railway.app | localhost:3000 |
 | **Railway env** | production | TestoviySite | — |
 | **Railway service** | www.nesterchukanatoliy.com | TestoviySite | — |
-| **Branch** | main | main (або feature/*) | feature/* |
+| **Branch** | main | TestovaGilka | будь-яка локальна |
 | **Database** | Railway PostgreSQL (prod) | Railway PostgreSQL (окрема) | Local PostgreSQL |
 | **WayForPay** | Live | Mock (auto-paid, alert) | Mock |
 | **KeyCRM** | Live | Disabled | Disabled |
 | **Analytics** | GA + Clarity | Disabled | Disabled |
 | **SEO robots** | index, follow | noindex, nofollow | noindex, nofollow |
 | **Banner** | Немає | "ТЕСТОВИЙ САЙТ..." (жовтий) | "ТЕСТОВИЙ САЙТ..." |
+
+---
+
+## Branch → Deployment mapping
+
+Фактична конфігурація Railway deployment triggers (authoritative, перевірено через Railway API):
+
+```
+GitHub branch: TestovaGilka  →  Railway env TestoviySite  →  service TestoviySite
+                                 APP_ENV=staging · staging PostgreSQL
+                                 WayForPay Mock · KeyCRM Disabled
+                                 staging-web-staging-2eaf.up.railway.app
+
+GitHub branch: main          →  Railway env production   →  service www.nesterchukanatoliy.com
+                                 APP_ENV=production (default) · production PostgreSQL
+                                 WayForPay Live · KeyCRM Live
+                                 nesterchukanatoliy.com
+```
+
+Гарантії ізоляції:
+- push у `TestovaGilka` **ніколи** не запускає production deploy;
+- push у `main` **ніколи** не запускає staging deploy;
+- staging має окремий `DATABASE_URL` і не використовує production БД для запису;
+- production-домени прикріплені лише до production service.
+
+Виняток: у staging є `PROD_DATABASE_URL` для кнопки «Синхронізувати» — використовується
+**тільки на читання** (`findMany`/`findFirst`), усі записи йдуть у staging БД.
+Гарди: `isStaging` та перевірка `DATABASE_URL !== PROD_DATABASE_URL`.
+
+## Робочий процес
+
+```
+1. git checkout TestovaGilka && git pull
+2. розробка + commit тільки тут
+3. git push origin TestovaGilka   → авто-деплой ТІЛЬКИ TestoviySite
+4. ручне тестування на staging
+5. STOP — чекати підтвердження
+6. git checkout main && git merge TestovaGilka (fast-forward) && git push origin main
+7. production deploy + smoke check
+8. git checkout TestovaGilka && git merge main   → main == TestovaGilka перед наступною задачею
+```
+
+Жодних feature-змін напряму в `main`.
 
 ---
 
@@ -146,7 +189,8 @@ openssl rand -hex 32  # для CRON_SECRET
 ```
 
 ### Крок 4: Deploy branch
-Railway > staging environment > Service Settings > Deploy Branch > обрати потрібну feature гілку
+Railway > TestoviySite environment > Service Settings > Deploy Branch > `TestovaGilka`
+(production service лишається на `main` — не змінювати)
 
 ### Крок 5: Ініціалізувати БД
 ```bash
