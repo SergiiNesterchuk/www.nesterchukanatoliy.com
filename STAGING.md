@@ -1,5 +1,10 @@
 # Тестовий сайт (TestoviySite) — Dev Workflow
 
+Середовища, деплой і Git-процес. Решта документації — [docs/README.md](docs/README.md).
+Логіка застосунку: [docs/CHECKOUT.md](docs/CHECKOUT.md) ·
+[docs/STOCK_VALIDATION.md](docs/STOCK_VALIDATION.md) ·
+[docs/SLUG_NAMESPACE.md](docs/SLUG_NAMESPACE.md)
+
 ## Environments
 
 | | Production | TestoviySite | Local |
@@ -33,30 +38,25 @@ GitHub branch: main          →  Railway env production   →  service www.nest
                                  nesterchukanatoliy.com
 ```
 
-Гарантії ізоляції:
+### Trigger isolation
+
+У проєкті рівно **два** deployment triggers, по одному на середовище:
+
+| Trigger | Наслідок |
+|---|---|
+| `TestovaGilka` → env `TestoviySite` / service `TestoviySite` | push у `TestovaGilka` деплоїть **тільки staging** |
+| `main` → env `production` / service `www.nesterchukanatoliy.com` | push у `main` деплоїть **тільки production** |
+
 - push у `TestovaGilka` **ніколи** не запускає production deploy;
 - push у `main` **ніколи** не запускає staging deploy;
-- staging має окремий `DATABASE_URL` і не використовує production БД для запису;
-- production-домени прикріплені лише до production service.
+- production-домени (`nesterchukanatoliy.com`, `www.nesterchukanatoliy.com`) прикріплені
+  лише до production service;
+- staging має власний `DATABASE_URL` і не пише в production БД.
 
-Виняток: у staging є `PROD_DATABASE_URL` для кнопки «Синхронізувати» — використовується
-**тільки на читання** (`findMany`/`findFirst`), усі записи йдуть у staging БД.
-Гарди: `isStaging` та перевірка `DATABASE_URL !== PROD_DATABASE_URL`.
-
-## Робочий процес
-
-```
-1. git checkout TestovaGilka && git pull
-2. розробка + commit тільки тут
-3. git push origin TestovaGilka   → авто-деплой ТІЛЬКИ TestoviySite
-4. ручне тестування на staging
-5. STOP — чекати підтвердження
-6. git checkout main && git merge TestovaGilka (fast-forward) && git push origin main
-7. production deploy + smoke check
-8. git checkout TestovaGilka && git merge main   → main == TestovaGilka перед наступною задачею
-```
-
-Жодних feature-змін напряму в `main`.
+Раніше існував третій, **orphan** trigger `main → env production → service TestoviySite`.
+Сервіс `TestoviySite` не має інстансу в production environment, тож trigger ніколи не
+давав деплою, але створював плутанину в конфігурації. **Видалений.** Якщо в Railway
+знову з'явиться cross-environment trigger — це помилка конфігурації.
 
 ---
 
@@ -158,16 +158,28 @@ Email на staging **працює** (Resend API key від production). Це з�
 
 ---
 
-## PROD_DATABASE_URL — чому це безпечно
+## PROD_DATABASE_URL — свідомий нюанс
 
-`PROD_DATABASE_URL` є у staging env vars для кнопки "Синхронізувати" в адмінці.
+`PROD_DATABASE_URL` присутній у staging env vars для кнопки «Синхронізувати» в адмінці
+(копіює каталог, сторінки й налаштування production → staging). Це єдине місце, де
+staging взагалі бачить production БД.
 
-**Захисти:**
-1. API endpoint `/api/admin/sync-from-production` перевіряє `isStaging` — на production повертає 403
-2. Перевірка `DATABASE_URL !== PROD_DATABASE_URL` — abort якщо однакові
+**Захисти (application-level):**
+1. `/api/admin/sync-from-production` перевіряє `isStaging` — на production повертає 403
+2. Перевірка `DATABASE_URL !== PROD_DATABASE_URL` — abort, якщо однакові
 3. `adminGuard` — потрібен адмін логін
-4. `prodPrisma` використовується **тільки для read** (findMany/findFirst)
-5. Всі write операції йдуть через `prisma` (staging DB)
+4. `prodPrisma` викликається **тільки на читання** (`findMany` / `findFirst`)
+5. Усі write-операції (`deleteMany` / `create`) йдуть через staging-клієнт
+
+**Known nuance (не баг, свідоме рішення):**
+це **не** database-level read-only credential. Staging володіє повноцінним connection
+string до production БД, а read-only гарантується **лише кодом**. Тобто будь-хто з
+доступом до staging env vars технічно має повний доступ до production даних, і помилка
+в коді синхронізації теоретично могла б записати в production.
+
+Повне закриття потребувало б окремої PostgreSQL-ролі з `GRANT SELECT` і окремого
+connection string. Наразі не реалізовано. Якщо змінюєте `sync-from-production` —
+переконайтесь, що `prodPrisma` не отримав жодного write-виклику.
 
 ---
 
@@ -211,25 +223,35 @@ main ────────────────── production (auto-dep
 
 ### Процес розробки
 
-1. Працюєш у гілці `TestovaGilka` (вона вже створена)
-2. Комітиш, пушиш → деплоїться тільки TestoviySite
-3. Тестуєш на тестовому сайті
-4. Все ок → merge в main → деплоїться production
-5. Повертаєшся в TestovaGilka, продовжуєш
+1. Працюєш у гілці `TestovaGilka` — жодних feature-змін напряму в `main`
+2. Комітиш, пушиш → деплоїться **тільки** TestoviySite
+3. Тестуєш вручну на тестовому сайті
+4. Отримуєш підтвердження → fast-forward merge у `main` → деплоїться production
+5. Production smoke check
+6. Синхронізуєш `TestovaGilka` з `main` перед наступною задачею
 
 ```bash
 git checkout TestovaGilka
-# ... робота ...
-git push
+git pull
+# ... робота, commit ...
+git push origin TestovaGilka        # → staging deploy
 
-# Готово до production:
+# Після ручного тесту й погодження:
 git checkout main
-git merge TestovaGilka
-git push origin main
+git merge --ff-only TestovaGilka    # історія лишається лінійною
+git push origin main                # → production deploy
 
-# Назад до роботи:
+# Синхронізація перед наступною задачею:
 git checkout TestovaGilka
+git merge main                      # main == TestovaGilka
 ```
+
+**Інваріант між задачами:** `main == TestovaGilka == origin/main == origin/TestovaGilka`.
+Якщо гілки розійшлись — спершу вирівняти, потім починати нову роботу.
+
+`--ff-only` навмисне: якщо fast-forward неможливий, значить у `main` є коміти, яких
+немає в тестовій гілці — це треба розібрати вручну, а не заливати merge-комітом.
+Force push не використовується.
 
 ---
 
@@ -303,12 +325,27 @@ npm run dev
 
 ## Як відкотитися
 
-Safety commit перед staging змінами: `4c614b5`
+Історія `main` — лінійна й опублікована, тому відкат робиться **новим комітом**, а не
+переписуванням історії. Force push у `main` не використовується.
 
 ```bash
-git reset --hard 4c614b5
-git push --force-with-lease origin main
+# Відкотити один проблемний коміт:
+git checkout main
+git revert <commit>
+git push origin main          # → production redeploy
+
+# Відкотити цілий діапазон:
+git revert --no-commit <old>..<new>
+git commit -m "revert: ..."
+git push origin main
 ```
+
+Швидша альтернатива без git: у Railway Dashboard → production → Deployments →
+обрати попередній успішний деплой → **Redeploy**. Це повертає працюючу версію за хвилини,
+але не змінює код — після цього все одно потрібен `git revert`, інакше наступний push у
+`main` знову задеплоїть зламану версію.
+
+Після відкату не забути синхронізувати `TestovaGilka` з `main`.
 
 ---
 
