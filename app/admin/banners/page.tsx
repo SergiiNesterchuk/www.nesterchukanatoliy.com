@@ -57,9 +57,6 @@ const SECTIONS = [
     { key: "social_facebook", label: "Facebook URL", type: "text", default: "" },
     { key: "social_tiktok", label: "TikTok URL", type: "text", default: "" },
   ]},
-  { title: "Checkout налаштування", items: [
-    { key: "checkout_require_terms", label: "Вимагати згоду з умовами", type: "select", default: "true", options: ["true", "false"] },
-  ]},
   { title: "Сторінка оплати", items: [
     { key: "checkout_success_title", label: "Заголовок (успіх)", type: "text", default: "Замовлення прийнято!" },
     { key: "checkout_success_text", label: "Текст (успіх)", type: "textarea", default: "Дякуємо за замовлення!" },
