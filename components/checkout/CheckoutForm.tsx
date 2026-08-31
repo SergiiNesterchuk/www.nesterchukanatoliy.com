@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/Input";
 import { useCartStore } from "@/hooks/useCart";
 import { formatPrice } from "@/shared/money";
 import { normalizePhoneUA, isValidPhoneUA, formatPhoneUA } from "@/shared/phone";
-import { DELIVERY_METHODS, COD_PREPAYMENT_AMOUNT } from "@/shared/constants";
+import { DELIVERY_METHODS, COD_PREPAYMENT_AMOUNT, MIN_ORDER_AMOUNT } from "@/shared/constants";
 import { Spinner } from "@/components/ui/Spinner";
 import { MapPin, Search } from "lucide-react";
 
@@ -52,6 +52,11 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [generalError, setGeneralError] = useState("");
+
+  // Cart is rehydrated from localStorage on the client only — same guard as CartIcon
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const belowMinimum = mounted && totalPrice() < MIN_ORDER_AMOUNT;
 
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -220,13 +225,14 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
 
   const validate = (): boolean => {
     const e: Record<string, string> = {};
+    if (items.length === 0) e.items = "Кошик порожній";
+    else if (totalPrice() < MIN_ORDER_AMOUNT) e.items = `Мінімальна сума замовлення — ${MIN_ORDER_AMOUNT / 100} грн`;
     if (!customerName.trim() || customerName.length < 2) e.customerName = "Вкажіть ім'я";
     if (!isValidPhoneUA(customerPhone)) e.customerPhone = "Невірний номер телефону";
     if (!selectedCity) e.city = "Оберіть місто";
     if (deliveryMethod === "nova_poshta_branch" && !selectedWarehouse) e.warehouse = "Оберіть відділення";
     if (deliveryMethod === "nova_poshta_courier" && !courierAddress.trim()) e.courierAddress = "Вкажіть адресу";
     if (requireTerms && !agreedToTerms) e.agreedToTerms = "Потрібна згода з умовами";
-    if (items.length === 0) e.items = "Кошик порожній";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -510,7 +516,13 @@ export function CheckoutForm({ requireTerms = true }: { requireTerms?: boolean }
         </div>
       )}
 
-      <Button type="submit" size="lg" loading={submitting} disabled={submitting} className="w-full">
+      {belowMinimum && (
+        <p className="text-center text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+          Мінімальна сума замовлення — {MIN_ORDER_AMOUNT / 100} грн
+        </p>
+      )}
+
+      <Button type="submit" size="lg" loading={submitting} disabled={submitting || belowMinimum} className="w-full">
         {submitting ? "Оформлення..." : (() => {
           const pm = paymentMethods.find((m) => m.key === selectedPaymentMethod);
           if (pm?.checkoutButtonLabel) return pm.checkoutButtonLabel;

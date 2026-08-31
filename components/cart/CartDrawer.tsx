@@ -8,9 +8,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { CartItem } from "./CartItem";
 import { useCartStore } from "@/hooks/useCart";
 import { formatPrice } from "@/shared/money";
+import { MIN_ORDER_AMOUNT } from "@/shared/constants";
 
 export function CartDrawer() {
   const { items, isOpen, closeCart, updateQuantity, removeItem, totalPrice } = useCartStore();
+  const subtotal = totalPrice();
+  const belowMinimum = subtotal < MIN_ORDER_AMOUNT;
 
   const safeUpdateQuantity = (productId: string, qty: number) => {
     if (qty <= 0) {
@@ -70,13 +73,24 @@ export function CartDrawer() {
             </Link>
             <div className="flex items-center justify-between text-base font-semibold">
               <span>Разом:</span>
-              <span>{formatPrice(totalPrice())}</span>
+              <span>{formatPrice(subtotal)}</span>
             </div>
-            <Link href="/checkout/" onClick={closeCart}>
-              <Button size="lg" className="w-full">
-                Оформити замовлення
-              </Button>
-            </Link>
+            {belowMinimum ? (
+              <>
+                <Button size="lg" className="w-full" disabled>
+                  Оформити замовлення
+                </Button>
+                <p className="text-center text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  Мінімальна сума замовлення — {MIN_ORDER_AMOUNT / 100} грн
+                </p>
+              </>
+            ) : (
+              <Link href="/checkout/" onClick={closeCart}>
+                <Button size="lg" className="w-full">
+                  Оформити замовлення
+                </Button>
+              </Link>
+            )}
           </div>
         </>
       )}

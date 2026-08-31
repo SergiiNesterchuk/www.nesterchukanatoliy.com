@@ -78,6 +78,9 @@ export const PAYMENT_METHODS = {
 /** COD prepayment amount in kopiyky. 20000 = 200 UAH */
 export const COD_PREPAYMENT_AMOUNT = 20000;
 
+/** Minimum order subtotal in kopiyky. 20000 = 200 UAH. */
+export const MIN_ORDER_AMOUNT = 20000;
+
 export const ITEMS_PER_PAGE = 12;
 export const MAX_CART_QUANTITY = 99;
 export const CRM_SYNC_MAX_RETRIES = 5;

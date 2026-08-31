@@ -9,6 +9,7 @@ import { buildAbsoluteUrl } from "@/shared/url";
 import { generatePublicOrderNumber } from "@/shared/order-number";
 import { generateOrderAccessToken } from "@/shared/access-token";
 import { isMockPayments, crmSyncEnabled } from "@/shared/features";
+import { MIN_ORDER_AMOUNT } from "@/shared/constants";
 
 const logger = createLogger("OrderService");
 
@@ -54,6 +55,14 @@ export class OrderService {
         lineTotal,
         imageUrl: product.images[0]?.url,
       });
+    }
+
+    // Minimum order: authoritative check on server-side subtotal (prices from DB, not client)
+    if (subtotal < MIN_ORDER_AMOUNT) {
+      logger.info("Order rejected: below minimum", { subtotal, minimum: MIN_ORDER_AMOUNT });
+      throw new ValidationError(
+        `Мінімальна сума замовлення — ${MIN_ORDER_AMOUNT / 100} грн`
+      );
     }
 
     // Generate both internal ref (for WayForPay) and public number (for customer)
