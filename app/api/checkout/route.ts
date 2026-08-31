@@ -5,6 +5,7 @@ import { successResponse, errorResponse } from "@/shared/api-response";
 import { prisma } from "@/shared/db";
 import { COD_PREPAYMENT_AMOUNT } from "@/shared/constants";
 import { isMockPayments, crmSyncEnabled } from "@/shared/features";
+import { ValidationError } from "@/shared/errors";
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
 
       if (estimatedTotal <= COD_PREPAYMENT_AMOUNT) {
         console.log("[Checkout] COD prepayment rejected: totalAmount=%d, paymentMethod=%s, reason=total <= prepayment threshold", estimatedTotal, validated.paymentMethod);
-        return errorResponse(new Error("Накладений платіж з авансом доступний для замовлень понад 200 грн."));
+        return errorResponse(new ValidationError("Накладений платіж з авансом доступний для замовлень понад 200 грн."));
       }
     }
 
